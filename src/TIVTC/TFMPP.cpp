@@ -331,7 +331,7 @@ void TFMPP::buildMotionMask1_SSE2(const unsigned char *srcp1, const unsigned cha
   fmemset(cpu, dstp + dst_pitch*height, dst_pitch, opt, 0xFF);
 #ifdef USE_INTR
   __m128i thresh = _mm_set1_epi8(max(min(255 - mthresh - 1, 255), 0));
-  __m128i full_ff = _mm_set1_epi8(0xFF);
+  __m128i full_ff = _mm_set1_epi8(-1);
   while (height--) {
     for (int x = 0; x < width; x += 16) {
       auto next1 = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp1 + s1_pitch + x));
@@ -510,7 +510,7 @@ void TFMPP::buildMotionMask2_SSE2(const unsigned char *srcp1, const unsigned cha
 {
 #ifdef USE_INTR
   __m128i thresh = _mm_set1_epi8(max(min(255 - mthresh - 1, 255), 0));
-  __m128i all_ff = _mm_set1_epi8(0xFF);
+  __m128i all_ff = _mm_set1_epi8(-1);
   __m128i onesByte = _mm_set1_epi8(0x01);
   __m128i twosByte = _mm_set1_epi8(0x02);
   __m128i foursByte = _mm_set1_epi8(0x04);
@@ -1190,7 +1190,7 @@ void TFMPP::blendDeintMask_SSE2(const unsigned char *srcp, unsigned char *dstp,
 #ifdef USE_INTR
   auto zero = _mm_setzero_si128();
   auto twosWord = _mm_set1_epi16(2);
-  auto onesMask = _mm_set1_epi8(0xFF);
+  auto onesMask = _mm_set1_epi8(-1);
   while (height--) {
     for (int x = 0; x < width; x += 16) {
       auto prev = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp - src_pitch + x));
@@ -1716,7 +1716,7 @@ void TFMPP::cubicDeintMask_SSE2(const unsigned char *srcp, unsigned char *dstp,
   auto threeWord = _mm_set1_epi16(3);
   auto sixteenWord = _mm_set1_epi16(16);
   auto nineteenWord = _mm_set1_epi16(19);
-  auto onesMask = _mm_set1_epi8(0xFF);
+  auto onesMask = _mm_set1_epi8(-1);
   while (height--) {
     for (int x = 0; x < width; x += 16) {
       auto prevprev = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp - src_pitch * 2 + x));
@@ -2702,7 +2702,7 @@ void TFMPP::maskClip2_SSE2(const unsigned char *srcp, const unsigned char *dntp,
   int msk_pitch, int dst_pitch, int width, int height)
 {
 #ifdef USE_INTR
-  __m128i onesMask = _mm_set1_epi8(0xFF);
+  __m128i onesMask = _mm_set1_epi8(-1);
   while (height--) {
     for (int x = 0; x < width; x += 16) {
       auto mask = _mm_load_si128(reinterpret_cast<const __m128i *>(maskp + x));

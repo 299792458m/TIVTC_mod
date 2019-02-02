@@ -3591,7 +3591,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
             {
               while (*linep != '=') *linep++;
               *linep++; *linep++;
-              sscanf(linep, "%c", &j);
+              sscanf(linep, "%c", (char *)&j);
               if (((j == 'T' || j == 't') && !chroma) || ((j == 'F' || j == 'f') && chroma))
               {
                 fclose(f);

@@ -1548,190 +1548,131 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
         buildDiffMapPlaneYUY2(prvnf, nxtnf, mapn, prvf_pitch, nxtf_pitch, map_pitch, Height, Widtha, tp, env);
     }
 #ifdef USE_C_NO_ASM
-    if (field == 0) {
     // TFM 1436
     // almost the same as in TFM 1144
-      for (int y = 2; y < Height - 2; y += 2) {
-        if ((y < y0a) || (y0a == y1a) || (y > y1a))
-        {
-          for (int ebx = startx; ebx < stopx; ebx += incl)
-          {
-            int eax = (mapp[ebx] << 3) + mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
-            if ((eax & 0xFF) == 0)
-              continue;
+	
+	//for (int y = 2; y < Height - 2; y += 2)
+	#pragma omp parallel for reduction(+:accumPc,accumPm,accumPml,accumNc,accumNm,accumNml) 
+	for (int jj = 1; jj < Height / 2 - 1; ++jj){
+		y = jj * 2;
 
-            int a_curr = curpf[ebx] + (curf[ebx] << 2) + curnf[ebx];
-            int a_prev = 3 * (prvpf[ebx] + prvnf[ebx]);
-            int diff_p_c = abs(a_prev - a_curr);
-            if (diff_p_c > 23) {
-              if ((eax & 9) != 0) // diff from previous similar asm block: condition
-                accumPc += diff_p_c;
-              if (diff_p_c > 42) {
-                if ((eax & 18) != 0) // diff: &18 instead of &10
-                  accumPm += diff_p_c;
-                if ((eax & 36) != 0) // diff: new condition and accumulator
-                  accumPml += diff_p_c;
-              }
-            }
-            int a_next = 3 * (nxtpf[ebx] + nxtnf[ebx]);
-            int diff_n_c = abs(a_next - a_curr);
-            if (diff_n_c > 23) {
-              if ((eax & 9) != 0) // diff from previous similar asm block: condition
-                accumNc += diff_n_c;
-              if (diff_n_c > 42) {
-                if ((eax & 18) != 0) // diff: &18 instead of &10
-                  accumNm += diff_n_c;
-                if ((eax & 36) != 0) // diff: &18 instead of &10
-                  accumNml += diff_n_c;
-              }
-            }
+		if ((y0a == y1a) || (y < y0a) || (y > y1a))
+		{
+			//ompのためにアドレス演算
+			unsigned char *t_mapp, *t_mapn;
+			const unsigned char *t_prvpf, *t_prvnf, *t_prvppf, *t_prvnnf;
+			const unsigned char *t_curpf, *t_curnf, *t_curf;
+			const unsigned char *t_nxtpf, *t_nxtnf, *t_nxtppf, *t_nxtnnf;
 
-            // additional difference from TFM 1144
-            if ((eax & 56) != 0) {
+			t_mapp = mapp + (jj - 1)*map_pitch;
+			t_mapn = t_mapp + map_pitch;
 
-              int a_prev = prvppf[ebx] + (prvpf[ebx] << 2) + prvnf[ebx];
-              int a_curr = 3 * (curpf[ebx] + curf[ebx]);
-              int diff_p_c = abs(a_prev - a_curr);
-              if (diff_p_c > 23) {
-                if ((eax & 8) != 0) // diff from previous similar asm block: condition
-                  accumPc += diff_p_c;
-                if (diff_p_c > 42) {
-                  if ((eax & 16) != 0) // diff: &16 instead of &18
-                    accumPm += diff_p_c;
-                  if ((eax & 32) != 0) // diff: new condition and accumulator
-                    accumPml += diff_p_c;
-                }
-              }
-              int a_next = nxtppf[ebx] + (nxtpf[ebx] << 2) + nxtnf[ebx]; // really! not 3*
-              int diff_n_c = abs(a_next - a_curr);
-              if (diff_n_c > 23) {
-                if ((eax & 8) != 0) // diff: &8 instead of &9
-                  accumNc += diff_n_c;
-                if (diff_n_c > 42) {
-                  if ((eax & 16) != 0) // diff: &16 instead of &18
-                    accumNm += diff_n_c;
-                  if ((eax & 32) != 0) // diff: &32 instead of &36
-                    accumNml += diff_n_c;
-                }
-              }
-            }
-          }
-        } // if
+			t_prvpf  = prvpf + (jj - 1)*prvf_pitch;
+			t_prvppf = t_prvpf - prvf_pitch;
+			t_prvnf  = t_prvpf + prvf_pitch;
+			t_prvnnf = t_prvnf + prvf_pitch;	//ちなみにpinterfさんのはnnfのアドレス演算が行われてない
 
-        mapp += map_pitch;
-        prvpf += prvf_pitch;
-        curpf += curf_pitch;
-        prvnf += prvf_pitch;
-        curf += curf_pitch;
-        nxtpf += nxtf_pitch;
-        curnf += curf_pitch;
-        nxtnf += nxtf_pitch;
-        mapn += map_pitch;
+			t_curf = curf + (jj - 1)*curf_pitch;
+			t_curpf = t_curf - curf_pitch;
+			t_curnf = t_curf + curf_pitch;
 
-        prvppf += prvf_pitch;
-        nxtppf += nxtf_pitch;
-      }
-    }
-    else {
-      // TFM 1633
-      // almost the same as in TFM 1436 (field==0= case)
-      // differences are after eax&56 block, see later
+			t_nxtpf  = nxtpf + (jj - 1)*nxtf_pitch;
+			t_nxtppf = t_nxtpf - nxtf_pitch;
+			t_nxtnf  = t_nxtpf + nxtf_pitch;
+			t_nxtnnf = t_nxtnf + nxtf_pitch;
 
-      for (int y = 2; y < Height - 2; y += 2) {
-        if ((y < y0a) || (y0a == y1a) || (y > y1a))
-        {
-          for (int ebx = startx; ebx < stopx; ebx += incl)
-          {
-            int eax = (mapp[ebx] << 3) + mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
-            if ((eax & 0xFF) == 0)
-              continue;
+			for (int ebx = startx; ebx < stopx; ebx += incl)	//inclは1 or 2
+			{
+				int eax,a_curr,a_prev,a_next,diff_p_c,diff_n_c;
 
-            int a_curr = curpf[ebx] + (curf[ebx] << 2) + curnf[ebx];
-            int a_prev = 3 * (prvpf[ebx] + prvnf[ebx]);
-            int diff_p_c = abs(a_prev - a_curr);
-            if (diff_p_c > 23) {
-              if ((eax & 9) != 0) // diff from previous similar asm block: condition
-                accumPc += diff_p_c;
-              if (diff_p_c > 42) {
-                if ((eax & 18) != 0) // diff: &18 instead of &10
-                  accumPm += diff_p_c;
-                if ((eax & 36) != 0) // diff: new condition and accumulator
-                  accumPml += diff_p_c;
-              }
-            }
-            int a_next = 3 * (nxtpf[ebx] + nxtnf[ebx]);
-            int diff_n_c = abs(a_next - a_curr);
-            if (diff_n_c > 23) {
-              if ((eax & 9) != 0) // diff from previous similar asm block: condition
-                accumNc += diff_n_c;
-              if (diff_n_c > 42) {
-                if ((eax & 18) != 0) // diff: &18 instead of &10
-                  accumNm += diff_n_c;
-                if ((eax & 36) != 0) // diff: &18 instead of &10
-                  accumNml += diff_n_c;
-              }
-            }
+				eax = (t_mapp[ebx] << 3) + t_mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+				if ((eax & 0xFF) == 0){continue;}
 
-            // difference from TFM 1436
-            // prvpf  -> prvnf
-            // prvppf -> prvpf
-            // prvnf  -> prvnnf
-            // curpf  -> curf
-            // curf   -> curnf
-            // nxtpf  -> nxtnf
-            // nxtppf -> nxtpf
-            // nxtnf  -> nxtnnf
-            // mask 8/16/32 -> 1/2/4
-            if ((eax & 56) != 0) {
+				a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
+				a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
+				a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
+				diff_p_c = abs(a_prev - a_curr);
+				diff_n_c = abs(a_next - a_curr);
 
-              //int a_prev = *(prvppf + ebx) + (*(prvpf + ebx) << 2) + *(prvnf + ebx);
-              //int a_curr = 3 * (*(curpf + ebx) + *(curf + ebx));
-              int a_prev = prvpf[ebx] + (prvnf[ebx] << 2) + prvnnf[ebx];
-              int a_curr = 3 * (curf[ebx] + curnf[ebx]);
-              int diff_p_c = abs(a_prev - a_curr);
-              if (diff_p_c > 23) {
-                if ((eax & 1) != 0) // diff: &1 instead of &8
-                  accumPc += diff_p_c;
-                if (diff_p_c > 42) {
-                  if ((eax & 2) != 0) // diff: &2 instead of &16
-                    accumPm += diff_p_c;
-                  if ((eax & 4) != 0) // diff: &4 instead of &32
-                    accumPml += diff_p_c;
-                }
-              }
-              //int a_next = *(nxtppf + ebx) + (*(nxtpf + ebx) << 2) + *(nxtnf + ebx); // really! not 3*
-              int a_next = nxtpf[ebx] + (nxtnf[ebx] << 2) + nxtnnf[ebx]; // really! not 3*
-              int diff_n_c = abs(a_next - a_curr);
-              if (diff_n_c > 23) {
-                if ((eax & 1) != 0) // diff: &1 instead of &8
-                  accumNc += diff_n_c;
-                if (diff_n_c > 2) {
-                  if ((eax & 16) != 0) // diff: &2 instead of &16
-                    accumNm += diff_n_c;
-                  if ((eax & 4) != 0) // diff: &4 instead of &32
-                    accumNml += diff_n_c;
-                }
-              }
-            }
-          }
-        } // if
+				if (diff_p_c > 23) {
+					if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
+					if (diff_p_c > 42) {
+						if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
+						if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
+					}
+				}
+				if (diff_n_c > 23) {
+					if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
+					if (diff_n_c > 42) {
+						if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
+						if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
+					}
+				}
 
-        mapp += map_pitch;
-        prvpf += prvf_pitch;
-        curpf += curf_pitch;
-        prvnf += prvf_pitch;
-        curf += curf_pitch;
-        nxtpf += nxtf_pitch;
-        curnf += curf_pitch;
-        nxtnf += nxtf_pitch;
-        mapn += map_pitch;
+				if (field == 0) {
+					// additional difference from TFM 1144
+					if ((eax & 56) != 0) {
+						a_curr = 3 * (t_curpf[ebx] + t_curf[ebx]);
+						a_prev = t_prvppf[ebx] + (t_prvpf[ebx] << 2) + t_prvnf[ebx];
+						a_next = t_nxtppf[ebx] + (t_nxtpf[ebx] << 2) + t_nxtnf[ebx];	// really! not 3*
 
-        prvppf += prvf_pitch;
-        nxtppf += nxtf_pitch;
-      }
+						diff_p_c = abs(a_prev - a_curr);
+						diff_n_c = abs(a_next - a_curr);
 
-    }
+						if (diff_p_c > 23) {
+							if ((eax & 8) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
+							if (diff_p_c > 42) {
+								if ((eax & 16) != 0){accumPm  += diff_p_c;}	// diff: &16 instead of &18
+								if ((eax & 32) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
+							}
+						}
+						if (diff_n_c > 23) {
+							if ((eax & 8) != 0){     accumNc  += diff_n_c;}	// diff: &8 instead of &9
+							if (diff_n_c > 42) {
+								if ((eax & 16) != 0){accumNm  += diff_n_c;}	// diff: &16 instead of &18
+								if ((eax & 32) != 0){accumNml += diff_n_c;}	// diff: &32 instead of &36
+							}
+						}
+					}
+				}
+				else{
+					// difference from TFM 1436
+					// prvpf  -> prvnf
+					// prvppf -> prvpf
+					// prvnf  -> prvnnf
+					// curpf  -> curf
+					// curf   -> curnf
+					// nxtpf  -> nxtnf
+					// nxtppf -> nxtpf
+					// nxtnf  -> nxtnnf
+					// mask 8/16/32 -> 1/2/4
+					if ((eax & 7) != 0) {
+						a_curr = 3 * (t_curf[ebx] + t_curnf[ebx]);
+						a_prev = t_prvpf[ebx] + (t_prvnf[ebx] << 2) + t_prvnnf[ebx];
+						a_next = t_nxtpf[ebx] + (t_nxtnf[ebx] << 2) + t_nxtnnf[ebx]; // really! not 3*
 
+						diff_p_c = abs(a_prev - a_curr);
+						diff_n_c = abs(a_next - a_curr);
+
+						if (diff_p_c > 23) {
+							if ((eax & 1) != 0){    accumPc  += diff_p_c;}	// diff: &1 instead of &8
+							if (diff_p_c > 42) {
+								if ((eax & 2) != 0){accumPm  += diff_p_c;}	// diff: &2 instead of &16
+								if ((eax & 4) != 0){accumPml += diff_p_c;}	// diff: &4 instead of &32
+							}
+						}
+						if (diff_n_c > 23) {
+							if ((eax & 1) != 0){    accumNc  += diff_n_c;}	// diff: &1 instead of &8
+							if (diff_n_c > 42) {
+								if ((eax & 2) != 0){accumNm  += diff_n_c;}	// diff: &2 instead of &16
+								if ((eax & 4) != 0){accumNml += diff_n_c;}	// diff: &4 instead of &32
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 #else
     if (field == 0)
     {

@@ -798,7 +798,8 @@ void TDeinterlace::check_combing_SSE2(const unsigned char *srcp, unsigned char *
       add edx, dst_pitch
       dec height
       jnz yloop
-      end :
+	end :
+	  emms
   }
 }
 
@@ -1187,7 +1188,8 @@ void TDeinterlace::check_combing_SSE2_Luma(const unsigned char *srcp, unsigned c
       add edx, dst_pitch
       dec height
       jnz yloop
-      end :
+	end :
+	  emms
   }
 }
 
