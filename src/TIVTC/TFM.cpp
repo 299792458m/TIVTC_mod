@@ -1552,64 +1552,64 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
     // almost the same as in TFM 1144
 	
 	//for (int y = 2; y < Height - 2; y += 2)
-	#pragma omp parallel for reduction(+:accumPc,accumPm,accumPml,accumNc,accumNm,accumNml) 
-	for (int jj = 1; jj < Height / 2 - 1; ++jj){
-		y = jj * 2;
+	//#pragma omp parallel for reduction(+:accumPc,accumPm,accumPml,accumNc,accumNm,accumNml) 
+	if (field==0){
+		for (int jj = 1; jj < Height / 2 - 1; ++jj){
+			y = jj * 2;
 
-		if ((y0a == y1a) || (y < y0a) || (y > y1a))
-		{
-			//ompのためにアドレス演算
-			unsigned char *t_mapp, *t_mapn;
-			const unsigned char *t_prvpf, *t_prvnf, *t_prvppf, *t_prvnnf;
-			const unsigned char *t_curpf, *t_curnf, *t_curf;
-			const unsigned char *t_nxtpf, *t_nxtnf, *t_nxtppf, *t_nxtnnf;
-
-			t_mapp = mapp + (jj - 1)*map_pitch;
-			t_mapn = t_mapp + map_pitch;
-
-			t_prvpf  = prvpf + (jj - 1)*prvf_pitch;
-			t_prvppf = t_prvpf - prvf_pitch;
-			t_prvnf  = t_prvpf + prvf_pitch;
-			t_prvnnf = t_prvnf + prvf_pitch;	//ちなみにpinterfさんのはnnfのアドレス演算が行われてない
-
-			t_curf = curf + (jj - 1)*curf_pitch;
-			t_curpf = t_curf - curf_pitch;
-			t_curnf = t_curf + curf_pitch;
-
-			t_nxtpf  = nxtpf + (jj - 1)*nxtf_pitch;
-			t_nxtppf = t_nxtpf - nxtf_pitch;
-			t_nxtnf  = t_nxtpf + nxtf_pitch;
-			t_nxtnnf = t_nxtnf + nxtf_pitch;
-
-			for (int ebx = startx; ebx < stopx; ebx += incl)	//inclは1 or 2
+			if ((y0a == y1a) || (y < y0a) || (y > y1a))
 			{
-				int eax,a_curr,a_prev,a_next,diff_p_c,diff_n_c;
+				//ompのためにアドレス演算
+				unsigned char *t_mapp, *t_mapn;
+				const unsigned char *t_prvpf, *t_prvnf, *t_prvppf, *t_prvnnf;
+				const unsigned char *t_curpf, *t_curnf, *t_curf;
+				const unsigned char *t_nxtpf, *t_nxtnf, *t_nxtppf, *t_nxtnnf;
 
-				eax = (t_mapp[ebx] << 3) + t_mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
-				if ((eax & 0xFF) == 0){continue;}
+				t_mapp = mapp + (jj - 1)*map_pitch;
+				t_mapn = t_mapp + map_pitch;
 
-				a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
-				a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
-				a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
-				diff_p_c = abs(a_prev - a_curr);
-				diff_n_c = abs(a_next - a_curr);
+				t_prvpf  = prvpf + (jj - 1)*prvf_pitch;
+				t_prvppf = t_prvpf - prvf_pitch;
+				t_prvnf  = t_prvpf + prvf_pitch;
+				t_prvnnf = t_prvnf + prvf_pitch;	//ちなみにpinterfさんのはnnfのアドレス演算が行われてない
 
-				if (diff_p_c > 23) {
-					if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
-					if (diff_p_c > 42) {
-						if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
-						if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
+				t_curf = curf + (jj - 1)*curf_pitch;
+				t_curpf = t_curf - curf_pitch;
+				t_curnf = t_curf + curf_pitch;
+
+				t_nxtpf  = nxtpf + (jj - 1)*nxtf_pitch;
+				t_nxtppf = t_nxtpf - nxtf_pitch;
+				t_nxtnf  = t_nxtpf + nxtf_pitch;
+				t_nxtnnf = t_nxtnf + nxtf_pitch;
+
+				for (int ebx = startx; ebx < stopx; ebx += incl)	//inclは1 or 2
+				{
+					int eax,a_curr,a_prev,a_next,diff_p_c,diff_n_c;
+
+					eax = (t_mapp[ebx] << 3) + t_mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+					if ((eax & 0xFF) == 0){continue;}
+
+					a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
+					a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
+					a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
+					diff_p_c = abs(a_prev - a_curr);
+					diff_n_c = abs(a_next - a_curr);
+
+					if (diff_p_c > 23) {
+						if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
+						if (diff_p_c > 42) {
+							if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
+							if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
+						}
 					}
-				}
-				if (diff_n_c > 23) {
-					if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
-					if (diff_n_c > 42) {
-						if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
-						if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
+					if (diff_n_c > 23) {
+						if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
+						if (diff_n_c > 42) {
+							if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
+							if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
+						}
 					}
-				}
 
-				if (field == 0) {
 					// additional difference from TFM 1144
 					if ((eax & 56) != 0) {
 						a_curr = 3 * (t_curpf[ebx] + t_curf[ebx]);
@@ -1634,8 +1634,68 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 							}
 						}
 					}
+
 				}
-				else{
+			}
+		}
+	}
+	else{
+		for (int jj = 1; jj < Height / 2 - 1; ++jj){
+			y = jj * 2;
+
+			if ((y0a == y1a) || (y < y0a) || (y > y1a))
+			{
+				//ompのためにアドレス演算
+				unsigned char *t_mapp, *t_mapn;
+				const unsigned char *t_prvpf, *t_prvnf, *t_prvppf, *t_prvnnf;
+				const unsigned char *t_curpf, *t_curnf, *t_curf;
+				const unsigned char *t_nxtpf, *t_nxtnf, *t_nxtppf, *t_nxtnnf;
+
+				t_mapp = mapp + (jj - 1)*map_pitch;
+				t_mapn = t_mapp + map_pitch;
+
+				t_prvpf  = prvpf + (jj - 1)*prvf_pitch;
+				t_prvppf = t_prvpf - prvf_pitch;
+				t_prvnf  = t_prvpf + prvf_pitch;
+				t_prvnnf = t_prvnf + prvf_pitch;	//ちなみにpinterfさんのはnnfのアドレス演算が行われてない
+
+				t_curf = curf + (jj - 1)*curf_pitch;
+				t_curpf = t_curf - curf_pitch;
+				t_curnf = t_curf + curf_pitch;
+
+				t_nxtpf  = nxtpf + (jj - 1)*nxtf_pitch;
+				t_nxtppf = t_nxtpf - nxtf_pitch;
+				t_nxtnf  = t_nxtpf + nxtf_pitch;
+				t_nxtnnf = t_nxtnf + nxtf_pitch;
+
+				for (int ebx = startx; ebx < stopx; ebx += incl)	//inclは1 or 2
+				{
+					int eax,a_curr,a_prev,a_next,diff_p_c,diff_n_c;
+
+					eax = (t_mapp[ebx] << 3) + t_mapn[ebx]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+					if ((eax & 0xFF) == 0){continue;}
+
+					a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
+					a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
+					a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
+					diff_p_c = abs(a_prev - a_curr);
+					diff_n_c = abs(a_next - a_curr);
+
+					if (diff_p_c > 23) {
+						if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
+						if (diff_p_c > 42) {
+							if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
+							if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
+						}
+					}
+					if (diff_n_c > 23) {
+						if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
+						if (diff_n_c > 42) {
+							if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
+							if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
+						}
+					}
+
 					// difference from TFM 1436
 					// prvpf  -> prvnf
 					// prvppf -> prvpf
