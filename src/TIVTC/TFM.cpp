@@ -1235,19 +1235,17 @@ int TFM::compareFieldsSlow(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt,
 				diff_p_c = abs(a_prev - a_curr);
 				diff_n_c = abs(a_next - a_curr);
 
-				if (diff_p_c > 23) {
-					if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
-					if (diff_p_c > 42) {
-						if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
-						if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
-					}
+				if ((eax & 9) != 0){
+					if (diff_p_c > 23) {accumPc  += diff_p_c;}
+					if (diff_n_c > 23) {accumNc  += diff_n_c;}
 				}
-				if (diff_n_c > 23) {
-					if ((eax & 9) != 0){     accumNc  += diff_n_c;}	// diff from previous similar asm block: condition
-					if (diff_n_c > 42) {
-						if ((eax & 18) != 0){accumNm  += diff_n_c;}	// diff: &18 instead of &10
-						if ((eax & 36) != 0){accumNml += diff_n_c;}	// diff: &18 instead of &10
-					}
+				if ((eax & 18) != 0){
+					if (diff_p_c > 42) {accumPm  += diff_p_c;}
+					if (diff_n_c > 42) {accumNm  += diff_n_c;}
+				}
+				if ((eax & 36) != 0){
+					if (diff_p_c > 42) {accumPml += diff_p_c;}
+					if (diff_n_c > 42) {accumNml += diff_n_c;}
 				}
 			}
 		}
@@ -1599,19 +1597,17 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 					diff_p_c = abs(a_prev - a_curr);
 					diff_n_c = abs(a_next - a_curr);
 
-					if (diff_p_c > 23) {
-						if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
-						if (diff_p_c > 42) {
-							if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
-							if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
-						}
+					if ((eax & 9) != 0){
+						if (diff_p_c > 23) {accumPc  += diff_p_c;}
+						if (diff_n_c > 23) {accumNc  += diff_n_c;}
 					}
-					if (diff_n_c > 23) {
-						if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
-						if (diff_n_c > 42) {
-							if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
-							if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
-						}
+					if ((eax & 18) != 0){
+						if (diff_p_c > 42) {accumPm  += diff_p_c;}
+						if (diff_n_c > 42) {accumNm  += diff_n_c;}
+					}
+					if ((eax & 36) != 0){
+						if (diff_p_c > 42) {accumPml += diff_p_c;}
+						if (diff_n_c > 42) {accumNml += diff_n_c;}
 					}
 
 					// additional difference from TFM 1144
@@ -1623,20 +1619,19 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 						diff_p_c = abs(a_prev - a_curr);
 						diff_n_c = abs(a_next - a_curr);
 
-						if (diff_p_c > 23) {
-							if ((eax & 8) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
-							if (diff_p_c > 42) {
-								if ((eax & 16) != 0){accumPm  += diff_p_c;}	// diff: &16 instead of &18
-								if ((eax & 32) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
-							}
+						if ((eax & 8) != 0){
+							if (diff_p_c > 23) {accumPc  += diff_p_c;}
+							if (diff_n_c > 23) {accumNc  += diff_n_c;}
 						}
-						if (diff_n_c > 23) {
-							if ((eax & 8) != 0){     accumNc  += diff_n_c;}	// diff: &8 instead of &9
-							if (diff_n_c > 42) {
-								if ((eax & 16) != 0){accumNm  += diff_n_c;}	// diff: &16 instead of &18
-								if ((eax & 32) != 0){accumNml += diff_n_c;}	// diff: &32 instead of &36
-							}
+						if ((eax & 16) != 0){
+							if (diff_p_c > 42) {accumPm  += diff_p_c;}
+							if (diff_n_c > 42) {accumNm  += diff_n_c;}
 						}
+						if ((eax & 32) != 0){
+							if (diff_p_c > 42) {accumPml += diff_p_c;}
+							if (diff_n_c > 42) {accumNml += diff_n_c;}
+						}
+
 					}
 
 				}
@@ -1687,19 +1682,17 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 					diff_p_c = abs(a_prev - a_curr);
 					diff_n_c = abs(a_next - a_curr);
 
-					if (diff_p_c > 23) {
-						if ((eax & 9) != 0){     accumPc  += diff_p_c;}	// diff from previous similar asm block: condition
-						if (diff_p_c > 42) {
-							if ((eax & 18) != 0){accumPm  += diff_p_c;}	// diff: &18 instead of &10
-							if ((eax & 36) != 0){accumPml += diff_p_c;}	// diff: new condition and accumulator
-						}
+					if ((eax & 9) != 0){	//00001001n
+						if (diff_p_c > 23) {accumPc  += diff_p_c;}	//23=00010111n 42=00101010n
+						if (diff_n_c > 23) {accumNc  += diff_n_c;}
 					}
-					if (diff_n_c > 23) {
-						if ((eax & 9) != 0){     accumNc  += diff_n_c;} // diff from previous similar asm block: condition
-						if (diff_n_c > 42) {
-							if ((eax & 18) != 0){accumNm  += diff_n_c;} // diff: &18 instead of &10
-							if ((eax & 36) != 0){accumNml += diff_n_c;} // diff: &18 instead of &10
-						}
+					if ((eax & 18) != 0){	//00010010n
+						if (diff_p_c > 42) {accumPm  += diff_p_c;}
+						if (diff_n_c > 42) {accumNm  += diff_n_c;}
+					}
+					if ((eax & 36) != 0){	//00100100n
+						if (diff_p_c > 42) {accumPml += diff_p_c;}
+						if (diff_n_c > 42) {accumNml += diff_n_c;}
 					}
 
 					// difference from TFM 1436
@@ -1720,19 +1713,17 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 						diff_p_c = abs(a_prev - a_curr);
 						diff_n_c = abs(a_next - a_curr);
 
-						if (diff_p_c > 23) {
-							if ((eax & 1) != 0){    accumPc  += diff_p_c;}	// diff: &1 instead of &8
-							if (diff_p_c > 42) {
-								if ((eax & 2) != 0){accumPm  += diff_p_c;}	// diff: &2 instead of &16
-								if ((eax & 4) != 0){accumPml += diff_p_c;}	// diff: &4 instead of &32
-							}
+						if ((eax & 1) != 0){
+							if (diff_p_c > 23) {accumPc  += diff_p_c;}
+							if (diff_n_c > 23) {accumNc  += diff_n_c;}
 						}
-						if (diff_n_c > 23) {
-							if ((eax & 1) != 0){    accumNc  += diff_n_c;}	// diff: &1 instead of &8
-							if (diff_n_c > 42) {
-								if ((eax & 2) != 0){accumNm  += diff_n_c;}	// diff: &2 instead of &16
-								if ((eax & 4) != 0){accumNml += diff_n_c;}	// diff: &4 instead of &32
-							}
+						if ((eax & 2) != 0){
+							if (diff_p_c > 42) {accumPm  += diff_p_c;}
+							if (diff_n_c > 42) {accumNm  += diff_n_c;}
+						}
+						if ((eax & 4) != 0){
+							if (diff_p_c > 42) {accumPml += diff_p_c;}
+							if (diff_n_c > 42) {accumNml += diff_n_c;}
 						}
 					}
 				}
