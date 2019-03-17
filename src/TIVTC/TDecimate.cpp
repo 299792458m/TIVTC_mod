@@ -1,5 +1,5 @@
 /*
-**                    TIVTC v1.0.6 for Avisynth 2.6 interface
+**                    TIVTC v1.0.14 for Avisynth 2.6 interface
 **
 **   TIVTC includes a field matching filter (TFM) and a decimation
 **   filter (TDecimate) which can be used together to achieve an
@@ -3591,7 +3591,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
             {
               while (*linep != '=') *linep++;
               *linep++; *linep++;
-              sscanf(linep, "%c", (char *)&j);
+              sscanf(linep, "%c", (char*)&j);
               if (((j == 'T' || j == 't') && !chroma) || ((j == 'F' || j == 'f') && chroma))
               {
                 fclose(f);

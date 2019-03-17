@@ -79,9 +79,9 @@ static int CPUCheckForExtensions()
     }
     if ((xgetbv0 & (0x7ull << 5)) && // OPMASK: upper-256 enabled by OS
       (xgetbv0 & (0x3ull << 1))) { // XMM/YMM enabled by OS
-                                   // Verify that XCR0[7:5] = 111b(OPMASK state, upper 256-bit of ZMM0-ZMM15 and
+                                   // Verify that XCR0[7:5] = ・11b・(OPMASK state, upper 256-bit of ZMM0-ZMM15 and
                                    // ZMM16-ZMM31 state are enabled by OS)
-                                   /// and that XCR0[2:1] = 11b(XMM state and YMM state are enabled by OS).
+                                   /// and that XCR0[2:1] = ・1b・(XMM state and YMM state are enabled by OS).
       __cpuid(cpuinfo, 7);
       if (IS_BIT_SET(cpuinfo[1], 16))
         result |= CPUF_AVX512F;
