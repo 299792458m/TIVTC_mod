@@ -28,6 +28,7 @@
 #include <windows.h>
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#include <smmintrin.h>	//sse4.1
 #include "internal.h"
 
   void checkSceneChangeYUY2_2_SSE2(const unsigned char *prvp, const unsigned char *srcp,
@@ -69,6 +70,20 @@
 
   template<bool aligned>
   void compute_sum_8x16_sse2_luma(const unsigned char *srcp, int pitch, int &sum);
+
+  extern __m128i compareFieldsSlowCal0(int ebx, __m128i readmsk, unsigned char *t_mapp, unsigned char *t_mapn);
+
+  extern void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
+	  const unsigned char *t_prvpf, const unsigned char*t_prvnf,
+	  const unsigned char *t_curpf, const unsigned char*t_curf, const unsigned char*t_curnf,
+	  const unsigned char *t_nxtpf, const unsigned char*t_nxtnf,
+	  unsigned long  &accumPc, unsigned long  &accumNc, unsigned long  &accumPm, unsigned long  &accumNm, unsigned long  &accumPml, unsigned long  &accumNml);
+
+  extern void compareFieldsSlowCal2(int ebx, __m128i eax, __m128i readmsk,int sft,
+	  const unsigned char *t_prvf0, const unsigned char*t_prvf1, const unsigned char*t_prvf2,
+	  const unsigned char *t_curf0, const unsigned char*t_curf1,
+	  const unsigned char *t_nxtf0, const unsigned char*t_nxtf1, const unsigned char*t_nxtf2,
+	  unsigned long  &accumPc, unsigned long  &accumNc, unsigned long  &accumPm, unsigned long  &accumNm, unsigned long  &accumPml, unsigned long  &accumNml);
 
 #ifdef ALLOW_MMX
   void checkSceneChangeYUY2_1_ISSE(const unsigned char *prvp, const unsigned char *srcp,

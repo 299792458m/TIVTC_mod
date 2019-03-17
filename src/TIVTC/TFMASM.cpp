@@ -2931,5 +2931,279 @@ template void compute_sum_8x16_sse2_luma<false>(const unsigned char *srcp, int p
 template void compute_sum_8x16_sse2_luma<true>(const unsigned char *srcp, int pitch, int &sum);
 
 
+__forceinline __m128i compareFieldsSlowCal0(int ebx, __m128i readmsk, unsigned char *t_mapp, unsigned char *t_mapn)
+{
+	//eax = (t_mapp[ebx] << 3) + t_mapn[ebx];	 // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+	auto temp = _mm_loadu_si128((__m128i *)(t_mapp + ebx));	//128bit境界以外にアクセスするが大丈夫？ ＋配列の順番注意
+	temp = _mm_shuffle_epi8(temp, readmsk);		//_mm_cvtepu8_epi16(temp);		//incl==1では下位8個を16bitに展開、==2では2byte毎
+	__m128i eax = _mm_slli_epi16(temp,3);		//to do shift and mul... 8bit命令はない
+	temp = _mm_loadu_si128((__m128i *)(t_mapn + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	eax = _mm_add_epi16(eax,temp);
+
+	return eax;
+}
+
+__forceinline void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
+	const unsigned char *t_prvpf, const unsigned char*t_prvnf,
+	const unsigned char *t_curpf, const unsigned char*t_curf, const unsigned char*t_curnf,
+	const unsigned char *t_nxtpf, const unsigned char*t_nxtnf,
+	unsigned long  &accumPc, unsigned long  &accumNc, unsigned long  &accumPm, unsigned long  &accumNm, unsigned long  &accumPml, unsigned long  &accumNml)
+{
+	__m128i temp,a_curr,a_prev,a_next,diff_p_c,diff_n_c,eaxmsk;
+	__m128i zero = _mm_setzero_si128();
+
+	//a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
+	temp = _mm_loadu_si128((__m128i *)(t_curpf + ebx));
+	a_curr = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_curf + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_slli_epi16(temp,2);
+	a_curr = _mm_add_epi16(a_curr,temp);
+	temp = _mm_loadu_si128((__m128i *)(t_curnf + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_curr = _mm_add_epi16(a_curr,temp);
+
+
+	//a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
+	temp = _mm_loadu_si128((__m128i *)(t_prvpf + ebx));
+	a_prev = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_prvnf + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_prev = _mm_add_epi16(a_prev,temp);
+	temp = _mm_set1_epi16(3);
+	a_prev = _mm_mullo_epi16(a_prev,temp);
+
+
+	//a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
+	temp = _mm_loadu_si128((__m128i *)(t_nxtpf + ebx));
+	a_next = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_nxtnf + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_next = _mm_add_epi16(a_next,temp);
+	temp = _mm_set1_epi16(3);
+	a_next = _mm_mullo_epi16(a_next,temp);
+
+
+	//diff_p_c = abs(a_prev - a_curr);
+	temp = _mm_sub_epi16(a_prev, a_curr);
+	diff_p_c = _mm_abs_epi16(temp);
+
+	//diff_n_c = abs(a_next - a_curr);
+	temp = _mm_sub_epi16(a_next, a_curr);
+	diff_n_c = _mm_abs_epi16(temp);
+
+	//if ((eax & 9) != 0){
+	//	if (diff_p_c > 23) {accumPc  += diff_p_c;}
+	//	if (diff_n_c > 23) {accumNc  += diff_n_c;}
+	//}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(9));
+	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&9 == 0) ? -1 : 0
+	//auto eaxmsk = _mm_add_epi16(temp, _mm_set1_epi16(1));	//(eax&9 == 0) ? 0 : 1
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&9 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	//(diffpc>23) ? -1 : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPc += _mm_cvtsi128_si32(temp);	
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));	//(diffnc>23) ? -1 : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eax9∧(diffnc>23) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eax9∧(diffnc>23) ? diffnc : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNc += _mm_cvtsi128_si32(temp);	
+
+
+	//if ((eax & 18) != 0){
+	//	if (diff_p_c > 42) {accumPm  += diff_p_c;}
+	//	if (diff_n_c > 42) {accumNm  += diff_n_c;}
+	//}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(18));
+	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&18 == 0) ? -1 : 0
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&18 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPm += _mm_cvtsi128_si32(temp);	
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNm += _mm_cvtsi128_si32(temp);
+
+
+	//if ((eax & 36) != 0){
+	//	if (diff_p_c > 42) {accumPml += diff_p_c;}
+	//	if (diff_n_c > 42) {accumNml += diff_n_c;}
+	//}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(36));
+	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&36 == 0) ? -1 : 0
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&36 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPml += _mm_cvtsi128_si32(temp);
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffnc>42)で1、else0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eaxmsk∧(diffnc>42)でdiffnc、else0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNml += _mm_cvtsi128_si32(temp);
+
+	return;
+}
+
+
+__forceinline void compareFieldsSlowCal2(int ebx, __m128i eax, __m128i readmsk,int sft,
+	const unsigned char *t_prvf0, const unsigned char*t_prvf1, const unsigned char*t_prvf2,
+	const unsigned char *t_curf0, const unsigned char*t_curf1,
+	const unsigned char *t_nxtf0, const unsigned char*t_nxtf1, const unsigned char*t_nxtf2,
+	unsigned long  &accumPc, unsigned long  &accumNc, unsigned long  &accumPm, unsigned long  &accumNm, unsigned long  &accumPml, unsigned long  &accumNml)
+{
+	__m128i temp,a_curr,a_prev,a_next,diff_p_c,diff_n_c,eaxmsk;
+	__m128i zero = _mm_setzero_si128();
+
+	// additional difference from TFM 1144
+
+	//if ((eax & 56) == 0) continue; //field0
+	//if ((eax &  7) == 0) continue; //field1
+	temp = _mm_set1_epi16(7<<sft);
+	if (_mm_testz_si128(eax,temp)){return;}
+
+	//	a_curr = 3 * (t_curpf[ebx] + t_curf[ebx]);	//field0
+	//	a_curr = 3 * (t_curf[ebx] + t_curnf[ebx]);	//field1
+	temp = _mm_loadu_si128((__m128i *)(t_curf0 + ebx));
+	a_curr = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_curf1 + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_curr = _mm_add_epi16(a_curr,temp);
+	temp = _mm_set1_epi16(3);
+	a_curr = _mm_mullo_epi16(a_curr,temp);
+
+
+	//	a_prev = t_prvppf[ebx] + (t_prvpf[ebx] << 2) + t_prvnf[ebx];	//field0
+	//	a_prev = t_prvpf[ebx] + (t_prvnf[ebx] << 2) + t_prvnnf[ebx];	//field1
+	temp = _mm_loadu_si128((__m128i *)(t_prvf0 + ebx));
+	a_prev = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_prvf1 + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_slli_epi16(temp,2);
+	a_prev = _mm_add_epi16(a_prev,temp);
+	temp = _mm_loadu_si128((__m128i *)(t_prvf2 + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_prev = _mm_add_epi16(a_prev,temp);
+
+
+	//	a_next = t_nxtppf[ebx] + (t_nxtpf[ebx] << 2) + t_nxtnf[ebx];	//field0
+	//	a_next = t_nxtpf[ebx] + (t_nxtnf[ebx] << 2) + t_nxtnnf[ebx];	//field1
+	temp = _mm_loadu_si128((__m128i *)(t_nxtf0 + ebx));
+	a_next = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_loadu_si128((__m128i *)(t_nxtf1 + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	temp = _mm_slli_epi16(temp,2);
+	a_next = _mm_add_epi16(a_next,temp);
+	temp = _mm_loadu_si128((__m128i *)(t_nxtf2 + ebx));
+	temp = _mm_shuffle_epi8(temp, readmsk);
+	a_next = _mm_add_epi16(a_next,temp);
+
+	//	diff_p_c = abs(a_prev - a_curr);
+	temp = _mm_sub_epi16(a_prev, a_curr);
+	diff_p_c = _mm_abs_epi16(temp);
+
+	//	diff_n_c = abs(a_next - a_curr);
+	temp = _mm_sub_epi16(a_next, a_curr);
+	diff_n_c = _mm_abs_epi16(temp);
+
+	//	if ((eax & 8) != 0){	//field0:8 field1:1
+	//		if (diff_p_c > 23) {accumPc  += diff_p_c;}
+	//		if (diff_n_c > 23) {accumNc  += diff_n_c;}
+	//	}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(1<<sft));		//
+	temp = _mm_cmpeq_epi16(temp, zero);						//(eax&8 == 0) ? -1 : 0
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&8 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPc += _mm_cvtsi128_si32(temp);	
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffnc>23) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eaxmsk∧(diffnc>23) ? diffnc : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNc += _mm_cvtsi128_si32(temp);	
+
+	//	if ((eax & 16) != 0){	//field0:16 field1:2
+	//		if (diff_p_c > 42) {accumPm  += diff_p_c;}
+	//		if (diff_n_c > 42) {accumNm  += diff_n_c;}
+	//	}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(2<<sft));
+	temp = _mm_cmpeq_epi16(temp, zero);						//(eax&16 == 0) ? -1 : 0
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&16 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPm += _mm_cvtsi128_si32(temp);
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNm += _mm_cvtsi128_si32(temp);
+
+	//	if ((eax & 32) != 0){	//field0:32 field1:4
+	//		if (diff_p_c > 42) {accumPml += diff_p_c;}
+	//		if (diff_n_c > 42) {accumNml += diff_n_c;}
+	//	}
+	temp = _mm_and_si128(eax, _mm_set1_epi16(4<<sft));		//
+	temp = _mm_cmpeq_epi16(temp, zero);						//(eax&32 == 0) ? -1 : 0
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&32 == 0) ? 0 : -1
+
+	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumPml += _mm_cvtsi128_si32(temp);
+
+	temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));
+	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
+	temp = _mm_mullo_epi16(temp,diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);
+	temp = _mm_hadd_epi16(temp,zero);
+	accumNml += _mm_cvtsi128_si32(temp);
+}
+
 
 #pragma warning(pop)	// reenable no emms warning

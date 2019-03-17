@@ -570,147 +570,123 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
   int y, count;
   bool upper, lower, upper2, lower2;
 #ifdef USE_C_NO_ASM
-  for (int y = 2; y < Height - 2; y += 2) {
-    for (int ebx = 1; ebx < Width - 1; ebx++) {
+  long cpu = env->GetCPUFlags();
 
-      //mov eax, dpp
-      //  mov ecx, dp
-      //  mov edx, dpn
-      //  mov esi, dstp
+	for (int y = 2; y < Height - 2; y += 2) {
 
-      if (dp[ebx] <= 3) continue;
-      if (dp[ebx - 1] <= 3 && dp[ebx + 1] <= 3 &&
-        dpp[ebx - 1] <= 3 && dpp[ebx] <= 3 && dpp[ebx + 1] <= 3 &&
-        dpn[ebx - 1] <= 3 && dpn[ebx] <= 3 && dpn[ebx + 1] <= 3) continue;
-      dstp[ebx]++; // inc BYTE PTR[esi + ebx]
-      if (dp[ebx] <= 19) continue; //  cmp BYTE PTR[ecx + ebx], 19, ja b2
+		for (int x = 1; x < Width - 1; x++){
+			
+			//ƒXƒLƒbƒv‚ª‘½‚¢ê‡‚É‚Í—LŒø
+			if ((cpu&CPUF_SSE4_1) && (x < Width-15)) {
+				__m128i msk  = _mm_set1_epi8(-4);	//3ˆÈã‚ÆAND
+				__m128i temp = _mm_loadu_si128((__m128i *)(dp + x));
+				if (_mm_testz_si128(temp, msk)){
+					x+=15;	//’†‚Å˜M‚é‚Ì‚Í—Ç‚­‚È‚¢‚ªEEE continueŒã‚É+1‚³‚ê‚é‚Ì‚ð–Y‚ê‚¸‚É
+					continue;
+				}
+			}
 
-      int edi = 0; // xor edi, edi
-      lower = 0;
-      upper = 0;
+			if (dp[x] <= 3) continue;
+			if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
+			dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
+			dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+
+			dstp[x]++;
+			if (dp[x] <= 19) continue;
+
+			int count = 0;
+			lower = 0;
+			upper = 0;
       
-      if (dpp[ebx - 1] > 19) edi++;
-      if (dpp[ebx] > 19) edi++;
-      if (dpp[ebx + 1] > 19) edi++;
+			if (dpp[x - 1] > 19) count++;
+			if (dpp[x    ] > 19) count++;
+			if (dpp[x + 1] > 19) count++;
 
-      if (edi != 0) upper = 1;
+			if (count != 0) upper = 1;
 
-      if (dp[ebx - 1] > 19) edi++;
-      if (dp[ebx + 1] > 19) edi++;
+			if (dp[x - 1] > 19) count++;
+			if (dp[x + 1] > 19) count++;
 
-      int esi = edi;
+			int count_p = count;
 
-      if (dpn[ebx - 1] > 19) edi++;
-      if (dpn[ebx] > 19) edi++;
-      if (dpn[ebx + 1] > 19) edi++;
+			if (dpn[x - 1] > 19) count++;
+			if (dpn[x    ] > 19) count++;
+			if (dpn[x + 1] > 19) count++;
 
-      if (edi <= 2) continue;
+			if (count <= 2) continue;
 
-      count = edi; // mov count, edi
-      if (count != esi) {  // cmp edi, esi, je b11
-        lower = 1; // mov lower, 1
-        if (upper != 0) { // cmp upper, 0, je b11
-          dstp[ebx] += 2; // mov esi, dstp, add BYTE PTR[esi + ebx], 2
-          continue; //  jmp c2
-        }
-      }
-      // b11 :
-      int eax = ebx - 4; // mov eax, ebx, add eax, -4
-      if (eax < 0) eax = 0; // jge p3, xor eax, eax
-      //  p3 :
+			if (count != count_p) {	//dpn‚Å‰ÁŽZ
+				lower = 1;
+				if (upper != 0) {	//dpp‚Å‰ÁŽZ
+					dstp[x] += 2;
+					continue;
+				}
+			}
 
-      int edx = ebx + 5;
-      lower2 = 0;
-      upper2 = 0;
-      //mov edx, ebx
-      if (edx > Width) edx = Width;
-      //mov ecx, Width
-      //mov lower2, 0
-      //add edx, 5
-      //mov upper2, 0
-      //cmp edx, ecx
-      //jle p4
-      //mov edx, ecx
-      //p4 :
-      if (y != 2) { // cmp y, 2,  je p5
-        int esi = eax;
-        do {
-          if (dppp[esi] > 19) {
-            upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
-            break;
-          }
-          esi++;
-        } while (esi < edx);
-      }
-    // p5 :
-      { // blocked for local vars
-        int esi = eax;
-        do {
-          if (dpp[esi] > 19)
-            upper = 1;
-          if (dpn[esi] > 19)
-            lower = 1;
-          if (upper != 0 && lower != 0)
-            break;
-          esi++;
-        } while (esi < edx);
-      }
+			lower2 = 0;
+			upper2 = 0;
 
-//    p12:
-      if (y != Height - 4) {
+			int start = x - 4;				// b11
+			if (start < 0) start = 0;
+			
+			int end = x + 5;					//  p3
+			if (end > Width) end = Width;
+			//p4 :
+			if (y != 2) {
+				for (int ii=start; ii<end; ii++){
+					if (dppp[ii] > 19) {
+						upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
+						break;
+					}
 
-        int esi = eax;
-        do {
-          if (dpnn[esi] > 19) {
-            lower2 = 1;
-            break;
-          }
-          esi++;
-        } while (esi < edx);
+				}
+			}
+			for (int ii=start; ii<end; ii++){
+				if (dpp[ii] > 19)            upper = 1;
+				if (dpn[ii] > 19)            lower = 1;
+				if (upper != 0 && lower != 0)	break;
+			}
 
-//            cmp BYTE PTR[ecx + esi], 19
-//            ja p15
-//            inc esi
-//            cmp esi, edx
-//            jl p14
-//            jmp p13
-//            p15 :
-//          mov lower2, 1
-      }
-      //p13 :
-      if (upper == 0) { // cmp upper, 0, jne p16
-       //  cmp lower, 0
-          //je p17
-          //cmp lower2, 0
-          //je p17
-          //jmp p18
-        if (lower == 0 || lower2 == 0) {
-        // p17:
-          if (count > 4)
-            dstp[ebx] += 4;
-        }
-        else {
-          dstp[ebx] += 2;
-          // p18
-        }
-      }
-      else {
-        if (lower != 0 || upper2 != 0) {
-          dstp[ebx] += 2;
-        }
-        else {
-          if (count > 4)
-           dstp[ebx] += 4;
-        }
-      }
-    }
-    dppp += tpitch;
-    dpp += tpitch;
-    dp += tpitch;
-    dpn += tpitch;
-    dpnn += tpitch;
-    dstp += dst_pitch;
-  }
+			if (y != Height - 4) {
+				for (int ii=start; ii<end; ii++){
+					if (dpnn[ii] > 19) {
+						lower2 = 1;
+						break;
+					}
+				}
+			}
+
+			//p13 :
+			if (upper == 0) {
+				if (lower == 0 || lower2 == 0) {
+				// p17:
+					if (count > 4){
+						dstp[x] += 4;
+					}
+				}
+				else {
+					// p18
+					dstp[x] += 2;
+				}
+			
+			}
+			else {
+				if (lower != 0 || upper2 != 0) {
+					dstp[x] += 2;
+				} else {
+					if (count > 4){
+						dstp[x] += 4;
+					}
+				}
+			}
+		}
+		dppp += tpitch;
+		dpp += tpitch;
+		dp += tpitch;
+		dpn += tpitch;
+		dpnn += tpitch;
+		dstp += dst_pitch;
+	}
 
 #else
   // TFMYV12 565
