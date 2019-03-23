@@ -1,6 +1,7 @@
 # TIVTC_mod
 a clone of pinterf's TIVTC
 
-and added something
--TFM‚Ìslow=2‚ÌŽž‚Ì‹““®‚ð1.05ŒÝŠ·‚ÉC³(‘½•ª1.0.11‚ÌƒoƒO ðŒ‚ªˆê•”ˆá‚¤‚Ì‚ÆAprvnnf,nxtnnf‚ÌƒAƒhƒŒƒX‰‰ŽZ–Y‚ê)
--OpenMP‚Å–³—‚â‚èfor‚ð‰ñ‚µ‚Ä‘¬“x‰ü‘P(–{Ž¿“I‚É‚Íƒƒ‚ƒŠƒAƒNƒZƒX‚ª”ñŒø—¦‚È‚½‚ß‚¾‚ªEEE)
+è‡ªåˆ†å‘ã‘ã®TFMé€Ÿåº¦èª¿æ•´ç‰ˆ
+- compareFieldsSlow2å‡¦ç†ã‚’SIMDåŒ–(ã—ãŸã¤ã‚‚ã‚Š
+- buildDiffMapPlaneYV12å‡¦ç†ã‚’ä¸€éƒ¨SIMDåŒ–(?)
+ã§é€Ÿåº¦å‘ä¸Šã‚’å›³ã‚‹
