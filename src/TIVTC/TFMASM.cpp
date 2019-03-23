@@ -2931,12 +2931,12 @@ template void compute_sum_8x16_sse2_luma<false>(const unsigned char *srcp, int p
 template void compute_sum_8x16_sse2_luma<true>(const unsigned char *srcp, int pitch, int &sum);
 
 
-__forceinline __m128i compareFieldsSlowCal0(int ebx, __m128i readmsk, unsigned char *t_mapp, unsigned char *t_mapn)
+__forceinline __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, unsigned char *t_mapp, unsigned char *t_mapn)
 {
 	//eax = (t_mapp[ebx] << 3) + t_mapn[ebx];	 // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
 	auto temp = _mm_loadu_si128((__m128i *)(t_mapp + ebx));	//128bit境界以外にアクセスするが大丈夫？ ＋配列の順番注意
 	temp = _mm_shuffle_epi8(temp, readmsk);		//_mm_cvtepu8_epi16(temp);		//incl==1では下位8個を16bitに展開、==2では2byte毎
-	__m128i eax = _mm_slli_epi16(temp,3);		//to do shift and mul... 8bit命令はない
+	__m128i eax = _mm_slli_epi16(temp,3);		//ssse3 to do shift and mul... 8bit命令はない
 	temp = _mm_loadu_si128((__m128i *)(t_mapn + ebx));
 	temp = _mm_shuffle_epi8(temp, readmsk);
 	eax = _mm_add_epi16(eax,temp);
@@ -2944,7 +2944,7 @@ __forceinline __m128i compareFieldsSlowCal0(int ebx, __m128i readmsk, unsigned c
 	return eax;
 }
 
-__forceinline void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
+__forceinline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
 	const unsigned char *t_prvpf, const unsigned char*t_prvnf,
 	const unsigned char *t_curpf, const unsigned char*t_curf, const unsigned char*t_curnf,
 	const unsigned char *t_nxtpf, const unsigned char*t_nxtnf,
@@ -2987,7 +2987,7 @@ __forceinline void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
 
 	//diff_p_c = abs(a_prev - a_curr);
 	temp = _mm_sub_epi16(a_prev, a_curr);
-	diff_p_c = _mm_abs_epi16(temp);
+	diff_p_c = _mm_abs_epi16(temp);	//ssse3
 
 	//diff_n_c = abs(a_next - a_curr);
 	temp = _mm_sub_epi16(a_next, a_curr);
@@ -3005,7 +3005,7 @@ __forceinline void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
 	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	//(diffpc>23) ? -1 : 0
 	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
 	temp = _mm_mullo_epi16(temp,diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
-	temp = _mm_hadd_epi16(temp,zero);						//sum
+	temp = _mm_hadd_epi16(temp,zero);						//sum ssse3
 	temp = _mm_hadd_epi16(temp,zero);
 	temp = _mm_hadd_epi16(temp,zero);
 	accumPc += _mm_cvtsi128_si32(temp);	
@@ -3072,7 +3072,7 @@ __forceinline void compareFieldsSlowCal1(int ebx, __m128i eax, __m128i readmsk,
 }
 
 
-__forceinline void compareFieldsSlowCal2(int ebx, __m128i eax, __m128i readmsk,int sft,
+__forceinline void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk,int sft,
 	const unsigned char *t_prvf0, const unsigned char*t_prvf1, const unsigned char*t_prvf2,
 	const unsigned char *t_curf0, const unsigned char*t_curf1,
 	const unsigned char *t_nxtf0, const unsigned char*t_nxtf1, const unsigned char*t_nxtf2,
@@ -3086,7 +3086,7 @@ __forceinline void compareFieldsSlowCal2(int ebx, __m128i eax, __m128i readmsk,i
 	//if ((eax & 56) == 0) continue; //field0
 	//if ((eax &  7) == 0) continue; //field1
 	temp = _mm_set1_epi16(7<<sft);
-	if (_mm_testz_si128(eax,temp)){return;}
+	if (_mm_testz_si128(eax,temp)){return;}	//sse4.1
 
 	//	a_curr = 3 * (t_curpf[ebx] + t_curf[ebx]);	//field0
 	//	a_curr = 3 * (t_curf[ebx] + t_curnf[ebx]);	//field1
@@ -3205,5 +3205,164 @@ __forceinline void compareFieldsSlowCal2(int ebx, __m128i eax, __m128i readmsk,i
 	accumNml += _mm_cvtsi128_si32(temp);
 }
 
+void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
+	unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int Height,
+	int Width, int tpitch)
+{
+	const unsigned char *dppp = tbuffer - tpitch;
+	const unsigned char *dpp = tbuffer;
+	const unsigned char *dp = tbuffer + tpitch;
+	const unsigned char *dpn = tbuffer + tpitch * 2;
+	const unsigned char *dpnn = tbuffer + tpitch * 3;
+
+	for (int y = 2; y < Height - 2; y += 2) {
+
+		for (int x = 1; x < Width - 1; x++){
+
+			__m128i msk,temp;
+			unsigned int dp_d,dpp_d,dpn_d;
+			unsigned int tmpi;
+
+			temp = _mm_loadu_si128((__m128i *)(dp + x));
+
+			//16byteスキップ
+			if (_mm_testz_si128(temp, _mm_set1_epi8(-4))){	//sse4.1
+				x+=15;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
+				continue;
+			}
+
+			if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4))){
+				//16byte未満でスキップ
+				temp = _mm_and_si128( temp, _mm_set1_epi8( -4 ) );	// subs(0.5cpi)よりも速い(0.33cpi)
+				temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	// <=3 ? ff : 0
+				temp = _mm_andnot_si128 (temp, _mm_set1_epi8(-1));	// <=3 ? 0 : ff ここでnotすると全部3以下の時にはtmpiが全部0になりbsfで値が帰らないので注意
+				tmpi = _mm_movemask_epi8( temp );	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
+				//tmpi= ~tmpi; //temp[] <=3 ? 0 : 1  上位16bitには1が入る 16bit内にbitが立つかどうかわからない時はこっちで
+
+				//この時点で <=3 ? 0 : 1
+
+				//tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) 速度が変わらない？
+				//bsfの場合
+				long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
+				_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
+				x += tmpl-1;					//continue後(forのpost)に+1されるので-1
+				continue;
+			}
+
+			dp_d = *(unsigned int *)(dp + x -1);
+			dpp_d = *(unsigned int *)(dpp + x -1);
+			dpn_d = *(unsigned int *)(dpn + x -1);//範囲(Width)を超えてアクセスするので注意
+
+			//if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
+			//dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
+			//dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+			if (((dp_d  & 0x00FC00FC) ==0) &&
+				((dpp_d & 0x00FCFCFC) ==0) &&
+				((dpn_d & 0x00FCFCFC) ==0 ))	continue;
+
+			dstp[x]++;
+
+			//if (dp[x] <= 19) continue;
+			if( ((dp_d>>8) &0x00ff) <= 19) continue;
+
+			int count = 0;
+			bool lower = 0;
+			bool upper = 0;
+
+			//__m128i temp;
+			temp = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
+			temp = _mm_subs_epu8( temp, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
+			temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
+			int ans = _mm_movemask_epi8( temp );	// temp[] <=19 ? 1 : 0 各バイトの最上位ビットを抽出
+			ans =~ans;								// temp[] > 19 ? 1 : 0 上位が1になるので注意
+			ans = ans & 0x0757;						//不要部分(dp[x],[x+2])を無視
+
+			count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
+			if (count <= 2) continue;
+
+			upper = ((ans & 0x0007) != 0) ? 1 : 0;	//dpp_dで加算 true/falseの方が良いような・・・
+			lower = ((ans & 0x0700) != 0) ? 1 : 0;	//dpn_dで加算
+
+			if (upper && lower) {					//dpp/dpnで両方加算
+				dstp[x] += 2;
+				continue;
+			}
+
+			bool lower2 = 0;
+			bool upper2 = 0;
+
+			int start = x - 4;				// b11
+			if (start < 0) start = 0;
+
+			int end = x + 5;				//  p3
+			if (end > Width) end = Width;
+
+			//p4 :
+			if (y != 2) {
+				for (int ii=start; ii<end; ii++){
+					if (dppp[ii] > 19) {
+						upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
+						break;
+					}
+				}
+			}
+
+			if(upper){
+				for (int ii=start; ii<end; ii++){
+					if (dpn[ii] > 19){
+						lower = 1;
+						break;
+					}
+				}
+			}
+			else{	//lower==1
+				for (int ii=start; ii<end; ii++){
+					if (dpp[ii] > 19){
+						upper = 1;
+						break;
+					}
+				}
+			}
+
+			if (y != Height - 4) {
+				for (int ii=start; ii<end; ii++){
+					if (dpnn[ii] > 19) {
+						lower2 = 1;
+						break;
+					}
+				}
+			}
+
+
+			//p13 :
+			if (upper == 0) {
+				if (lower == 0 || lower2 == 0) {	// p17:
+					if (count > 4){
+						dstp[x] += 4;
+					}
+				}
+				else {
+					dstp[x] += 2;	// p18
+				}
+			}
+			else {	//upper=1
+				if (lower != 0 || upper2 != 0) {
+					dstp[x] += 2;
+				}
+				else {
+					if (count > 4){
+						dstp[x] += 4;
+					}
+				}
+			}
+		}
+		dppp += tpitch;
+		dpp += tpitch;
+		dp += tpitch;
+		dpn += tpitch;
+		dpnn += tpitch;
+		dstp += dst_pitch;
+	}
+}
 
 #pragma warning(pop)	// reenable no emms warning

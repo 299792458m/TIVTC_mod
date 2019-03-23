@@ -1230,12 +1230,12 @@ int TFM::compareFieldsSlow(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt,
 			if (cpu&CPUF_SSE4_1) {
 				for (; ebx <= stopx - 8*incl; ebx += incl*8)	//incl=1 or 2
 				{
-					__m128i eax = compareFieldsSlowCal0(ebx,readmsk,t_mapp, t_mapn);
+					__m128i eax = compareFieldsSlowCal0_SSSE3(ebx,readmsk,t_mapp, t_mapn);
 
 					//if ((eax & 0xFF) == 0){continue;}
 					if (_mm_testz_si128(eax,_mm_set1_epi16(255))){continue;}
 
-					compareFieldsSlowCal1(ebx,eax,readmsk,
+					compareFieldsSlowCal1_SSSE3(ebx,eax,readmsk,
 						t_prvpf,t_prvnf, t_curpf, t_curf, t_curnf, t_nxtpf, t_nxtnf,
 						accumPc, accumNc,accumPm, accumNm, accumPml, accumNml);
 				
@@ -1611,19 +1611,19 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 				if (cpu&CPUF_SSE4_1) {
 					for (; ebx < stopx-7; ebx += incl*8)	//incl=1 or 2
 					{
-						__m128i eax = compareFieldsSlowCal0(ebx,readmsk,t_mapp, t_mapn);
+						__m128i eax = compareFieldsSlowCal0_SSSE3(ebx,readmsk,t_mapp, t_mapn);
 						//if ((eax & 0xFF) == 0){continue;}
 						if (_mm_testz_si128(eax,_mm_set1_epi16(255))){continue;}
 
 
-						compareFieldsSlowCal1(ebx,eax,readmsk,
+						compareFieldsSlowCal1_SSSE3(ebx,eax,readmsk,
 							t_prvpf,t_prvnf,
 							t_curpf, t_curf, t_curnf,
 							t_nxtpf, t_nxtnf,
 							accumPc, accumNc,accumPm, accumNm, accumPml, accumNml);
 
 						int sft=3;//field==0 ? 3 : 0;
-						compareFieldsSlowCal2(ebx,eax,readmsk,sft,
+						compareFieldsSlowCal2_SSE41(ebx,eax,readmsk,sft,
 							t_prvppf,t_prvpf, t_prvnf,
 							t_curpf, t_curf,
 							t_nxtppf, t_nxtpf,t_nxtnf,
@@ -1720,19 +1720,19 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 				if (cpu&CPUF_SSE4_1) {
 					for (; ebx < stopx-7; ebx += incl*8)	//incl=1 or 2
 					{
-						__m128i eax = compareFieldsSlowCal0(ebx,readmsk,t_mapp, t_mapn);
+						__m128i eax = compareFieldsSlowCal0_SSSE3(ebx,readmsk,t_mapp, t_mapn);
 					
 						//if ((eax & 0xFF) == 0){continue;}
 						if (_mm_testz_si128(eax,_mm_set1_epi16(255))){continue;}
 
-						compareFieldsSlowCal1(ebx,eax,readmsk,
+						compareFieldsSlowCal1_SSSE3(ebx,eax,readmsk,
 							t_prvpf,t_prvnf,
 							t_curpf, t_curf, t_curnf,
 							t_nxtpf, t_nxtnf,
 							accumPc, accumNc,accumPm, accumNm, accumPml, accumNml);
 					
 						int sft=0;//field==0 ? 3 : 0;
-						compareFieldsSlowCal2(ebx,eax,readmsk,sft,
+						compareFieldsSlowCal2_SSE41(ebx,eax,readmsk,sft,
 							t_prvpf, t_prvnf,t_prvnnf,
 							t_curf, t_curnf,
 							t_nxtpf,t_nxtnf,t_nxtnnf,

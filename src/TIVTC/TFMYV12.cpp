@@ -562,42 +562,55 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
 {
   buildABSDiffMask(prvp - prv_pitch, nxtp - nxt_pitch, prv_pitch, nxt_pitch,
     tpitch, Width, Height >> 1, env);
-  const unsigned char *dppp = tbuffer - tpitch;
-  const unsigned char *dpp = tbuffer;
-  const unsigned char *dp = tbuffer + tpitch;
-  const unsigned char *dpn = tbuffer + tpitch * 2;
-  const unsigned char *dpnn = tbuffer + tpitch * 3;
-  int y, count;
-  bool upper, lower, upper2, lower2;
-#ifdef USE_C_NO_ASM
+  
   long cpu = env->GetCPUFlags();
-
+  if (opt != 4)
+  {
+	  if (opt == 0) cpu &= ~0x2C;
+	  else if (opt == 1) { cpu &= ~0x28; cpu |= 0x04; }
+	  else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
+	  else if (opt == 3) cpu |= 0x2C;
+  }
+  if(cpu & CPUF_SSE4_2){
+	  buildDiffMapPlaneYV12_SSE42( tbuffer,
+	 dstp, prv_pitch, nxt_pitch, dst_pitch, Height, Width, tpitch);
+  }
+  else{
+    const unsigned char *dppp = tbuffer - tpitch;
+    const unsigned char *dpp = tbuffer;
+    const unsigned char *dp = tbuffer + tpitch;
+    const unsigned char *dpn = tbuffer + tpitch * 2;
+    const unsigned char *dpnn = tbuffer + tpitch * 3;
+#ifdef USE_C_NO_ASM
 	for (int y = 2; y < Height - 2; y += 2) {
 
 		for (int x = 1; x < Width - 1; x++){
 			
-			//スキップが多い場合には有効
-			if ((cpu&CPUF_SSE4_1) && (x < Width-15)) {
-				__m128i msk  = _mm_set1_epi8(-4);	//3以上とAND
-				__m128i temp = _mm_loadu_si128((__m128i *)(dp + x));
-				if (_mm_testz_si128(temp, msk)){
-					x+=15;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
-					continue;
-				}
-			}
+			//if (dp[x] <= 3) continue;
+			//if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
+			//dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
+			//dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+			unsigned int dp_d,dpp_d,dpn_d;
+			dp_d = *(unsigned int *)(dp + x);
+			if((dp_d & 0xFCFCFCFC) ==0) {x+=3; continue;}	//連続する場合には有効？
+			if((dp_d & 0x000000FC) ==0) continue;
 
-			if (dp[x] <= 3) continue;
-			if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
-			dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
-			dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+			dp_d = *(unsigned int *)(dp + x -1);
+			dpp_d = *(unsigned int *)(dpp + x -1);
+			dpn_d = *(unsigned int *)(dpn + x -1);
+			if (((dp_d  & 0x00FC00FC) ==0) &&
+				((dpp_d & 0x00FCFCFC) ==0) &&
+				((dpn_d & 0x00FCFCFC) ==0 ))	continue;	// <=3 ?
 
 			dstp[x]++;
-			if (dp[x] <= 19) continue;
+
+			//if (dp[x] <= 19) continue;
+			if( ((dp_d>>8) &0x00ff) <= 19) continue;
 
 			int count = 0;
-			lower = 0;
-			upper = 0;
-      
+			bool lower = 0;
+			bool upper = 0;
+
 			if (dpp[x - 1] > 19) count++;
 			if (dpp[x    ] > 19) count++;
 			if (dpp[x + 1] > 19) count++;
@@ -619,18 +632,19 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
 				lower = 1;
 				if (upper != 0) {	//dppで加算
 					dstp[x] += 2;
-					continue;
+				continue;
 				}
 			}
 
-			lower2 = 0;
-			upper2 = 0;
+			bool lower2 = 0;
+			bool upper2 = 0;
 
 			int start = x - 4;				// b11
 			if (start < 0) start = 0;
-			
-			int end = x + 5;					//  p3
+
+			int end = x + 5;				//  p3
 			if (end > Width) end = Width;
+
 			//p4 :
 			if (y != 2) {
 				for (int ii=start; ii<end; ii++){
@@ -638,13 +652,24 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
 						upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
 						break;
 					}
-
 				}
 			}
-			for (int ii=start; ii<end; ii++){
-				if (dpp[ii] > 19)            upper = 1;
-				if (dpn[ii] > 19)            lower = 1;
-				if (upper != 0 && lower != 0)	break;
+
+			if(upper){
+				for (int ii=start; ii<end; ii++){
+					if (dpn[ii] > 19){
+						lower = 1;
+						break;
+					}
+				}
+			}
+			else{	//lower==1
+				for (int ii=start; ii<end; ii++){
+					if (dpp[ii] > 19){
+						upper = 1;
+						break;
+					}
+				}
 			}
 
 			if (y != Height - 4) {
@@ -656,24 +681,23 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
 				}
 			}
 
+
 			//p13 :
 			if (upper == 0) {
-				if (lower == 0 || lower2 == 0) {
-				// p17:
+				if (lower == 0 || lower2 == 0) {	// p17:
 					if (count > 4){
 						dstp[x] += 4;
 					}
 				}
 				else {
-					// p18
-					dstp[x] += 2;
+					dstp[x] += 2;	// p18
 				}
-			
 			}
-			else {
+			else {	//upper=1
 				if (lower != 0 || upper2 != 0) {
 					dstp[x] += 2;
-				} else {
+				}
+				else {
 					if (count > 4){
 						dstp[x] += 4;
 					}
@@ -687,9 +711,12 @@ void TFM::buildDiffMapPlaneYV12(const unsigned char *prvp, const unsigned char *
 		dpnn += tpitch;
 		dstp += dst_pitch;
 	}
+  }
 
 #else
-  // TFMYV12 565
+  int y, count;
+  bool upper, lower, upper2, lower2;
+// TFMYV12 565
   __asm
   {
     mov y, 2
