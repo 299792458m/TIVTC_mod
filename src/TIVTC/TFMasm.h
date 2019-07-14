@@ -32,7 +32,7 @@
 //#include <tmmintrin.h>	//SSSE3
 //#include <smmintrin.h>	//SSE4.1
 #include <nmmintrin.h>	//SSE4.2
-//#include <immintrin.h>	//AVX/AVX2/FMA
+#include <immintrin.h>	//AVX/AVX2/FMA
 #include "internal.h"
 
   void checkSceneChangeYUY2_2_SSE2(const unsigned char *prvp, const unsigned char *srcp,

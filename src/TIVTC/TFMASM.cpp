@@ -785,47 +785,65 @@ void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
   int height)
 {
 #ifdef USE_INTR
-  if (!(width & 15))
-  {
-    while (height--) {
-      for (int x = 0; x < width; x += 16)
-      {
-        __m128i src_prev = _mm_load_si128(reinterpret_cast<const __m128i *>(prvp + x));
-        __m128i src_next = _mm_load_si128(reinterpret_cast<const __m128i *>(nxtp + x));
-        __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
-        __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
-        __m128i diff = _mm_or_si128(diffpn, diffnp);
-        _mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), diff);
-      }
-      prvp += prv_pitch;
-      nxtp += nxt_pitch;
-      dstp += dst_pitch;
-    }
-  }
-  else {
-    width -= 8; // last chunk is 8 bytes instead of 16
-    while (height--) {
-      int x;
-      for (x = 0; x < width; x += 16)
-      {
-        __m128i src_prev = _mm_load_si128(reinterpret_cast<const __m128i *>(prvp + x));
-        __m128i src_next = _mm_load_si128(reinterpret_cast<const __m128i *>(nxtp + x));
-        __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
-        __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
-        __m128i diff = _mm_or_si128(diffpn, diffnp);
-        _mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), diff);
-      }
-      __m128i src_prev = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(prvp + x));
-      __m128i src_next = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(nxtp + x));
-      __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
-      __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
-      __m128i diff = _mm_or_si128(diffpn, diffnp);
-      _mm_storel_epi64(reinterpret_cast<__m128i *>(dstp + x), diff);
-      prvp += prv_pitch;
-      nxtp += nxt_pitch;
-      dstp += dst_pitch;
-    }
-  }
+/*	if (!(width & 31)) avx2にしてみたけど変わらなかった
+	{
+		while (height--) {
+			for (int x = 0; x < width; x += 32)
+			{
+				auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i *>(prvp + x));
+				auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i *>(nxtp + x));
+				auto diffpn = _mm256_subs_epu8(src_prev, src_next);
+				auto diffnp = _mm256_subs_epu8(src_next, src_prev);
+				auto diff   = _mm256_or_si256(diffpn, diffnp);
+				_mm256_store_si256(reinterpret_cast<__m256i *>(dstp + x), diff);
+			}
+			prvp += prv_pitch;
+			nxtp += nxt_pitch;
+			dstp += dst_pitch;
+		}
+	}
+	else */
+	if (!(width & 15))
+	  {
+		while (height--) {
+		 for (int x = 0; x < width; x += 16)
+		  {
+			__m128i src_prev = _mm_load_si128(reinterpret_cast<const __m128i *>(prvp + x));
+			__m128i src_next = _mm_load_si128(reinterpret_cast<const __m128i *>(nxtp + x));
+			__m128i diffpn = _mm_subs_epu8(src_prev, src_next);
+			__m128i diffnp = _mm_subs_epu8(src_next, src_prev);
+			__m128i diff = _mm_or_si128(diffpn, diffnp);
+			_mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), diff);
+		  }
+		  prvp += prv_pitch;
+		  nxtp += nxt_pitch;
+		  dstp += dst_pitch;
+		}
+	  }
+	  else {
+		width -= 8; // last chunk is 8 bytes instead of 16
+		while (height--) {
+		  int x;
+		  for (x = 0; x < width; x += 16)
+		  {
+			__m128i src_prev = _mm_load_si128(reinterpret_cast<const __m128i *>(prvp + x));
+			__m128i src_next = _mm_load_si128(reinterpret_cast<const __m128i *>(nxtp + x));
+			__m128i diffpn = _mm_subs_epu8(src_prev, src_next);
+			__m128i diffnp = _mm_subs_epu8(src_next, src_prev);
+			__m128i diff = _mm_or_si128(diffpn, diffnp);
+			_mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), diff);
+		  }
+		  __m128i src_prev = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(prvp + x));
+		  __m128i src_next = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(nxtp + x));
+		  __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
+		  __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
+		  __m128i diff = _mm_or_si128(diffpn, diffnp);
+		  _mm_storel_epi64(reinterpret_cast<__m128i *>(dstp + x), diff);
+		  prvp += prv_pitch;
+		  nxtp += nxt_pitch;
+		  dstp += dst_pitch;
+		}
+	  }
 #else
   if (!(width & 15))
   {
@@ -1045,19 +1063,19 @@ void buildABSDiffMask2_SSE2(const unsigned char *prvp, const unsigned char *nxtp
         __m128i tmp = _mm_or_si128(tmp1, tmp2);
         _mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), tmp);
       }
-      __m128i src_prev = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(prvp + x));
-      __m128i src_next = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(nxtp + x));
-      __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
-      __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
-      __m128i diff = _mm_or_si128(diffpn, diffnp);
-      __m128i added251 = _mm_adds_epu8(diff, mask251);
-      __m128i added235 = _mm_adds_epu8(diff, mask235);
-      __m128i cmp251 = _mm_cmpeq_epi8(added251, all_ff);
-      __m128i cmp235 = _mm_cmpeq_epi8(added235, all_ff);
-      __m128i tmp1 = _mm_and_si128(cmp251, onesMask);
-      __m128i tmp2 = _mm_and_si128(cmp235, twosMask);
-      __m128i tmp = _mm_or_si128(tmp1, tmp2);
-      _mm_storel_epi64(reinterpret_cast<__m128i *>(dstp + x), tmp);
+		  __m128i src_prev = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(prvp + x));
+		  __m128i src_next = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(nxtp + x));
+		  __m128i diffpn = _mm_subs_epu8(src_prev, src_next);
+		  __m128i diffnp = _mm_subs_epu8(src_next, src_prev);
+		  __m128i diff = _mm_or_si128(diffpn, diffnp);
+		  __m128i added251 = _mm_adds_epu8(diff, mask251);
+		  __m128i added235 = _mm_adds_epu8(diff, mask235);
+		  __m128i cmp251 = _mm_cmpeq_epi8(added251, all_ff);
+		  __m128i cmp235 = _mm_cmpeq_epi8(added235, all_ff);
+		  __m128i tmp1 = _mm_and_si128(cmp251, onesMask);
+		  __m128i tmp2 = _mm_and_si128(cmp235, twosMask);
+		  __m128i tmp = _mm_or_si128(tmp1, tmp2);
+		  _mm_storel_epi64(reinterpret_cast<__m128i *>(dstp + x), tmp);
       prvp += prv_pitch;
       nxtp += nxt_pitch;
       dstp += dst_pitch;
@@ -1311,7 +1329,7 @@ void buildABSDiffMask2_MMX(const unsigned char *prvp, const unsigned char *nxtp,
 #endif
 
 template<bool aligned, bool with_luma_mask>
-static void check_combing_SSE2_generic_simd(const unsigned char *srcp, unsigned char *dstp, int width,
+static void check_combing_SSE41_generic_simd(const unsigned char *srcp, unsigned char *dstp, int width,
   int height, int src_pitch, int src_pitch2, int dst_pitch, __m128i threshb, __m128i thresh6w)
 {
   __m128i all_ff = _mm_set1_epi8(-1);
@@ -1333,64 +1351,58 @@ static void check_combing_SSE2_generic_simd(const unsigned char *srcp, unsigned 
       }
       auto res_part1 = xmm2_cmp;
       bool cmpres_is_allzero;
-#ifdef _M_X64
-      cmpres_is_allzero = (_mm_cvtsi128_si64(xmm2_cmp) | _mm_cvtsi128_si64(_mm_srli_si128(xmm2_cmp, 8))) == 0; // _si64: only at x64 platform
-#else
-      cmpres_is_allzero = (_mm_cvtsi128_si32(xmm2_cmp) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 4)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 8)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 12))
-        ) == 0;
-#endif
-        if (!cmpres_is_allzero) {
-          // output2
-          auto zero = _mm_setzero_si128();
-          // compute 3*(p+n)
-          auto next_lo = _mm_unpacklo_epi8(next, zero);
-          auto prev_lo = _mm_unpacklo_epi8(prev, zero);
-          auto next_hi = _mm_unpackhi_epi8(next, zero);
-          auto prev_hi = _mm_unpackhi_epi8(prev, zero);
-          __m128i threeMask = _mm_set1_epi16(3);
-          auto mul_lo = _mm_mullo_epi16(_mm_adds_epu16(next_lo, prev_lo), threeMask);
-          auto mul_hi = _mm_mullo_epi16(_mm_adds_epu16(next_hi, prev_hi), threeMask);
 
-          // compute (pp+c*4+nn)
-          auto prevprev = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp - src_pitch * 2 + x));
-          auto prevprev_lo = _mm_unpacklo_epi8(prevprev, zero);
-          auto prevprev_hi = _mm_unpackhi_epi8(prevprev, zero);
-          auto curr_lo = _mm_unpacklo_epi8(curr, zero);
-          auto curr_hi = _mm_unpackhi_epi8(curr, zero);
-          auto sum2_lo = _mm_adds_epu16(_mm_slli_epi16(curr_lo, 2), prevprev_lo); // pp + c*4
-          auto sum2_hi = _mm_adds_epu16(_mm_slli_epi16(curr_hi, 2), prevprev_hi); // pp + c*4
+	  cmpres_is_allzero = _mm_testz_si128(xmm2_cmp, xmm2_cmp);	//needs sse4.1(Penryn or after)
 
-          auto nextnext = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp + src_pitch * 2 + x));
-          auto nextnext_lo = _mm_unpacklo_epi8(nextnext, zero);
-          auto nextnext_hi = _mm_unpackhi_epi8(nextnext, zero);
-          auto sum3_lo = _mm_adds_epu16(sum2_lo, nextnext_lo);
-          auto sum3_hi = _mm_adds_epu16(sum2_hi, nextnext_hi);
+		if (!cmpres_is_allzero) {
+			// output2
+			auto zero = _mm_setzero_si128();
+			// compute 3*(p+n)
+			auto next_lo = _mm_unpacklo_epi8(next, zero);
+			auto prev_lo = _mm_unpacklo_epi8(prev, zero);
+			auto next_hi = _mm_unpackhi_epi8(next, zero);
+			auto prev_hi = _mm_unpackhi_epi8(prev, zero);
+			__m128i threeMask = _mm_set1_epi16(3);
+			auto mul_lo = _mm_mullo_epi16(_mm_adds_epu16(next_lo, prev_lo), threeMask);
+			auto mul_hi = _mm_mullo_epi16(_mm_adds_epu16(next_hi, prev_hi), threeMask);
 
-          // working with sum3=(pp+c*4+nn)   and  mul=3*(p+n)
-          auto diff_sum3lo_mullo = _mm_subs_epu16(sum3_lo, mul_lo);
-          auto diff_mullo_sum3lo = _mm_subs_epu16(mul_lo, sum3_lo);
-          auto diff_sum3hi_mulhi = _mm_subs_epu16(sum3_hi, mul_hi);
-          auto diff_mulhi_sum3hi = _mm_subs_epu16(mul_hi, sum3_hi);
-          // abs( (pp+c*4+nn) - mul=3*(p+n) )
-          auto max_lo = _mm_max_epi16(diff_sum3lo_mullo, diff_mullo_sum3lo);
-          auto max_hi = _mm_max_epi16(diff_sum3hi_mulhi, diff_mulhi_sum3hi);
-          // abs( (pp+c*4+nn) - mul=3*(p+n) ) + thresh6w
-          auto lo_thresh6w_added = _mm_adds_epu16(max_lo, thresh6w);
-          auto hi_thresh6w_added = _mm_adds_epu16(max_hi, thresh6w);
-          // maximum reached?
-          auto cmp_lo = _mm_cmpeq_epi16(lo_thresh6w_added, all_ff);
-          auto cmp_hi = _mm_cmpeq_epi16(hi_thresh6w_added, all_ff);
+			// compute (pp+c*4+nn)
+			auto prevprev = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp - src_pitch * 2 + x));
+			auto prevprev_lo = _mm_unpacklo_epi8(prevprev, zero);
+			auto prevprev_hi = _mm_unpackhi_epi8(prevprev, zero);
+			auto curr_lo = _mm_unpacklo_epi8(curr, zero);
+			auto curr_hi = _mm_unpackhi_epi8(curr, zero);
+			auto sum2_lo = _mm_adds_epu16(_mm_slli_epi16(curr_lo, 2), prevprev_lo); // pp + c*4
+			auto sum2_hi = _mm_adds_epu16(_mm_slli_epi16(curr_hi, 2), prevprev_hi); // pp + c*4
 
-          auto res_lo = _mm_srli_epi16(cmp_lo, 8);
-          auto res_hi = _mm_srli_epi16(cmp_hi, 8);
-          auto res_part2 = _mm_packus_epi16(res_lo, res_hi);
+			auto nextnext = _mm_load_si128(reinterpret_cast<const __m128i *>(srcp + src_pitch * 2 + x));
+			auto nextnext_lo = _mm_unpacklo_epi8(nextnext, zero);
+			auto nextnext_hi = _mm_unpackhi_epi8(nextnext, zero);
+			auto sum3_lo = _mm_adds_epu16(sum2_lo, nextnext_lo);
+			auto sum3_hi = _mm_adds_epu16(sum2_hi, nextnext_hi);
 
-          auto res = _mm_and_si128(res_part1, res_part2);
-          _mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), res);
-        }
+			// working with sum3=(pp+c*4+nn)   and  mul=3*(p+n)
+			auto diff_sum3lo_mullo = _mm_subs_epu16(sum3_lo, mul_lo);
+			auto diff_mullo_sum3lo = _mm_subs_epu16(mul_lo, sum3_lo);
+			auto diff_sum3hi_mulhi = _mm_subs_epu16(sum3_hi, mul_hi);
+			auto diff_mulhi_sum3hi = _mm_subs_epu16(mul_hi, sum3_hi);
+			// abs( (pp+c*4+nn) - mul=3*(p+n) )
+			auto max_lo = _mm_max_epi16(diff_sum3lo_mullo, diff_mullo_sum3lo);
+			auto max_hi = _mm_max_epi16(diff_sum3hi_mulhi, diff_mulhi_sum3hi);
+			// abs( (pp+c*4+nn) - mul=3*(p+n) ) + thresh6w
+			auto lo_thresh6w_added = _mm_adds_epu16(max_lo, thresh6w);
+			auto hi_thresh6w_added = _mm_adds_epu16(max_hi, thresh6w);
+			// maximum reached?
+			auto cmp_lo = _mm_cmpeq_epi16(lo_thresh6w_added, all_ff);
+			auto cmp_hi = _mm_cmpeq_epi16(hi_thresh6w_added, all_ff);
+
+			auto res_lo = _mm_srli_epi16(cmp_lo, 8);
+			auto res_hi = _mm_srli_epi16(cmp_hi, 8);
+			auto res_part2 = _mm_packus_epi16(res_lo, res_hi);
+
+			auto res = _mm_and_si128(res_part1, res_part2);
+			_mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), res);
+		}
     }
     srcp += src_pitch;
     dstp += dst_pitch;
@@ -1412,7 +1424,7 @@ void check_combing_SSE2(const unsigned char *srcp, unsigned char *dstp, int widt
 {
 #ifdef USE_INTR
   // no luma masking
-  check_combing_SSE2_generic_simd<aligned, false>(srcp, dstp, width, height, src_pitch, src_pitch2, dst_pitch, threshb, thresh6w);
+  check_combing_SSE41_generic_simd<aligned, false>(srcp, dstp, width, height, src_pitch, src_pitch2, dst_pitch, threshb, thresh6w);
 #else
   __asm
   {
@@ -1819,7 +1831,7 @@ void check_combing_SSE2_Luma(const unsigned char *srcp, unsigned char *dstp, int
 {
 #ifdef USE_INTR
   // with luma masking
-  check_combing_SSE2_generic_simd<aligned, true>(srcp, dstp, width, height, src_pitch, src_pitch2, dst_pitch, threshb, thresh6w);
+  check_combing_SSE41_generic_simd<aligned, true>(srcp, dstp, width, height, src_pitch, src_pitch2, dst_pitch, threshb, thresh6w);
 #else
   __asm
   {
@@ -2609,7 +2621,7 @@ void compute_sum_8x8_sse2(const unsigned char *srcp, int pitch, int &sum)
   __m128i summa = _mm_setzero_si128();
   srcp += pitch * 2;
   for (int i = 0; i < 4; i++) { // 4x2=8
-    __m128i curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
+	  __m128i curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
     __m128i curr1 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp + pitch));
 
     __m128i prev_anded = _mm_and_si128(prev0, prev1_currMinus1);
@@ -3000,7 +3012,7 @@ __forceinline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i rea
 	temp = _mm_and_si128(eax, _mm_set1_epi16(9));
 	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&9 == 0) ? -1 : 0
 	//auto eaxmsk = _mm_add_epi16(temp, _mm_set1_epi16(1));	//(eax&9 == 0) ? 0 : 1
-	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&9 == 0) ? 0 : -1
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&9 != 0) ? -1 : 0
 
 	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	//(diffpc>23) ? -1 : 0
 	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
@@ -3025,7 +3037,7 @@ __forceinline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i rea
 	//}
 	temp = _mm_and_si128(eax, _mm_set1_epi16(18));
 	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&18 == 0) ? -1 : 0
-	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&18 == 0) ? 0 : -1
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&18 != 0) ? -1 : 0
 
 	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
 	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
@@ -3050,7 +3062,7 @@ __forceinline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i rea
 	//}
 	temp = _mm_and_si128(eax, _mm_set1_epi16(36));
 	temp = _mm_cmpeq_epi16(temp, zero);		//(eax&36 == 0) ? -1 : 0
-	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&36 == 0) ? 0 : -1
+	eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&36 != 0) ? -1 : 0
 
 	temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
 	temp = _mm_mullo_epi16(temp,eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
@@ -3219,7 +3231,7 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 
 		for (int x = 1; x < Width - 1; x++){
 
-			__m128i msk,temp;
+			__m128i temp;
 			unsigned int dp_d,dpp_d,dpn_d;
 			unsigned int tmpi;
 
@@ -3235,9 +3247,8 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 				//16byte未満でスキップ
 				temp = _mm_and_si128( temp, _mm_set1_epi8( -4 ) );	// subs(0.5cpi)よりも速い(0.33cpi)
 				temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	// <=3 ? ff : 0
-				temp = _mm_andnot_si128 (temp, _mm_set1_epi8(-1));	// <=3 ? 0 : ff ここでnotすると全部3以下の時にはtmpiが全部0になりbsfで値が帰らないので注意
 				tmpi = _mm_movemask_epi8( temp );	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
-				//tmpi= ~tmpi; //temp[] <=3 ? 0 : 1  上位16bitには1が入る 16bit内にbitが立つかどうかわからない時はこっちで
+				tmpi= ~tmpi;						//temp[] <=3 ? 0 : 1  上位16bitには1が入る andnotを使うよりも何故か速い
 
 				//この時点で <=3 ? 0 : 1
 

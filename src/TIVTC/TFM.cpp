@@ -59,6 +59,7 @@ PVideoFrame __stdcall TFM::GetFrame(int n, IScriptEnvironment* env)
     sprintf(buf, "TFM:  ----------------------------------------\n");
     OutputDebugString(buf);
   }
+  //input/ovrで上書きするとき
   if (getMatchOvr(n, fmatch, combed, d2vmatch,
     flags == 5 ? checkSceneChange(prv, src, nxt, env, n) : false))
   {
@@ -130,6 +131,7 @@ PVideoFrame __stdcall TFM::GetFrame(int n, IScriptEnvironment* env)
     lastMatch.combed = combed;
     return dst;
   }
+  //通常
 d2vCJump:
   if (mode == 6)
   {
@@ -219,6 +221,7 @@ d2vCJump:
       fmatch = 1;
     }
   }
+  //mode0-5
   else
   {
     if (!slow) fmatch = compareFields(prv, src, nxt, 1, frstT, nmatch1, nmatch2, mmatch1, mmatch2, np, n, env);
@@ -2565,62 +2568,45 @@ void TFM::buildABSDiffMask(const unsigned char *prvp, const unsigned char *nxtp,
   int prv_pitch, int nxt_pitch, int tpitch, int width, int height,
   IScriptEnvironment *env)
 {
-  long cpu = env->GetCPUFlags();
-  if (opt != 4)
-  {
-    if (opt == 0) cpu &= ~0x2C;
-    else if (opt == 1) { cpu &= ~0x28; cpu |= 0x04; }
-    else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
-    else if (opt == 3) cpu |= 0x2C;
-  }
-  if ((cpu&CPUF_SSE2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch) & 15))
-  {
-    // aligned. 
-    // different path if not mod16, but only for remaining 8 bytes
-    buildABSDiffMask_SSE2(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch,
-      width, height);
-  }
+	long cpu = env->GetCPUFlags();
+	if (opt != 4)
+	{
+		if (opt == 0) cpu &= ~0x2C;
+		else if (opt == 1) { cpu &= ~0x28; cpu |= 0x04; }
+		else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
+		else if (opt == 3) cpu |= 0x2C;
+	}
+	if ((cpu&CPUF_SSE2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch) & 15))
+	{
+		// aligned. 
+		// different path if not mod16, but only for remaining 8 bytes
+		buildABSDiffMask_SSE2(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch,
+			width, height);
+	}
 #ifdef ALLOW_MMX
-  else if (cpu&CPUF_MMX)
-  {
-    buildABSDiffMask_MMX(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch,
-      width, height);
-  }
+	else if (cpu&CPUF_MMX)
+	{
+		buildABSDiffMask_MMX(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch,
+			width, height);
+	}
 #endif
-  else
-  {
-    unsigned char *dstp = tbuffer;
-    if (!(vi.IsYUY2() && !mChroma))
-    {
-      for (int y = 0; y < height; ++y)
-      {
-        for (int x = 0; x < width; x += 4)
-        {
-          dstp[x + 0] = abs(prvp[x + 0] - nxtp[x + 0]);
-          dstp[x + 1] = abs(prvp[x + 1] - nxtp[x + 1]);
-          dstp[x + 2] = abs(prvp[x + 2] - nxtp[x + 2]);
-          dstp[x + 3] = abs(prvp[x + 3] - nxtp[x + 3]);
-        }
-        prvp += prv_pitch;
-        nxtp += nxt_pitch;
-        dstp += tpitch;
-      }
-    }
-    else
-    {
-      for (int y = 0; y < height; ++y)
-      {
-        for (int x = 0; x < width; x += 4)
-        {
-          dstp[x + 0] = abs(prvp[x + 0] - nxtp[x + 0]);
-          dstp[x + 2] = abs(prvp[x + 2] - nxtp[x + 2]);
-        }
-        prvp += prv_pitch;
-        nxtp += nxt_pitch;
-        dstp += tpitch;
-      }
-    }
-  }
+	else
+	{
+		unsigned char *dstp = tbuffer;
+		{
+		  for (int y = 0; y < height; ++y)
+		  {
+			for (int x = 0; x < width; x ++)
+			{
+			  //deleted other codes for compiler vectorlize
+			  dstp[x] = abs(prvp[x] - nxtp[x]);
+			}
+			prvp += prv_pitch;
+			nxtp += nxt_pitch;
+			dstp += tpitch;
+		  }
+		}
+	}
 }
 
 AVSValue __cdecl Create_TFM(AVSValue args, void* user_data, IScriptEnvironment* env)
@@ -2822,7 +2808,10 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
           continue;
         ++firstLine;
         linep = linein;
+		//field/crc、まで読み飛ばす
         while (*linep != 'f' && *linep != 'F' && *linep != 0 && *linep != ' ' && *linep != 'c') *linep++;
+
+		//field設定
         if (*linep == 'f' || *linep == 'F')
         {
           if (firstLine == 1)
@@ -2838,7 +2827,8 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
             }
           }
         }
-        else if (*linep == 'c')
+		//crc設定
+		else if (*linep == 'c')
         {
           if (_strnicmp(linein, "crc32 = ", 8) == 0)
           {
@@ -2859,6 +2849,7 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
             }
           }
         }
+		//通常フィールド読み込み
         else if (*linep == ' ')
         {
           linet = linein;
@@ -2888,13 +2879,13 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
               d2vmarked = micmarked = false;
               *linep++;
               q = *linep;
-              if (q == 112) q = 0;
-              else if (q == 99) q = 1;
-              else if (q == 110) q = 2;
-              else if (q == 98) q = 3;
-              else if (q == 117) q = 4;
-              else if (q == 108) q = 5;
-              else if (q == 104) q = 6;
+              if (q == 112) q = 0;		//p
+              else if (q == 99) q = 1;	//c
+              else if (q == 110) q = 2;	//n
+              else if (q == 98) q = 3;	//b
+              else if (q == 117) q = 4;	//u
+              else if (q == 108) q = 5;	//l
+              else if (q == 104) q = 6;	//h
               else
               {
                 fclose(f);
@@ -2906,8 +2897,8 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
               if (*linep != 0)
               {
                 qt = *linep;
-                if (qt == 45) qt = 0;
-                else if (qt == 43) qt = COMBED;
+                if (qt == 45) qt = 0;			//-
+                else if (qt == 43) qt = COMBED;	//+
                 else if (qt == '1') { d2vmarked = true; qt = -1; }
                 else if (qt == '[') { micmarked = true; qt = -1; }
                 else
@@ -3515,7 +3506,7 @@ TFM::~TFM()
         {
           if (outArray[h] & FILE_ENTRY)
           {
-            match = (outArray[h] & 0x07);
+            match = (outArray[h] & 0x07);				//下位3bit
             sprintf(tempBuf, "%d %c", h, MTC(match));
             if (outArray[h] & 0x20)
             {
