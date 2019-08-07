@@ -3229,22 +3229,40 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 
 	for (int y = 2; y < Height - 2; y += 2) {
 
-		for (int x = 1; x < Width - 1; x++){
+		unsigned int dp_d,dpp_d,dpn_d;
+		unsigned int tmpi;
 
-			__m128i temp;
-			unsigned int dp_d,dpp_d,dpn_d;
-			unsigned int tmpi;
+		for (int x=1; x < Width - 1; x++){
 
-			temp = _mm_loadu_si128((__m128i *)(dp + x));
+			auto temp = _mm_loadu_si128((__m128i *)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
+			dp_d = *(unsigned int *)(dp + x -1);	//下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
+			dpp_d = *(unsigned int *)(dpp + x -1);
+			dpn_d = *(unsigned int *)(dpn + x -1);	//範囲(Width)を超えてアクセスするので注意
+
 
 			//16byteスキップ
 			if (_mm_testz_si128(temp, _mm_set1_epi8(-4))){	//sse4.1
-				x+=15;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
+				x+=16;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
+
+				do{	//連続スキップ用 あまり効果なし？
+					temp = _mm_loadu_si128((__m128i *)(dp + x));
+					if(_mm_testz_si128(temp, _mm_set1_epi8(-4))){
+						x+=16;
+					}
+					else{
+						break;
+					}
+				}
+				while(x < Width-1);
+
+				x--;	//continue時に++されるから
 				continue;
 			}
 
-			if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4))){
-				//16byte未満でスキップ
+			//16byte未満でスキップ
+			//if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4)))
+			if( (dp_d & 0x0000FC00) == 0)
+			{
 				temp = _mm_and_si128( temp, _mm_set1_epi8( -4 ) );	// subs(0.5cpi)よりも速い(0.33cpi)
 				temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	// <=3 ? ff : 0
 				tmpi = _mm_movemask_epi8( temp );	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
@@ -3252,17 +3270,16 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 
 				//この時点で <=3 ? 0 : 1
 
-				//tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) 速度が変わらない？
+				//tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) どっちでも速度が変わらない？
+				//x += tmpi-1;				//continue後(forのpost)に+1されるので-1
+				//continue;
+
 				//bsfの場合
 				long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
 				_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
 				x += tmpl-1;					//continue後(forのpost)に+1されるので-1
 				continue;
 			}
-
-			dp_d = *(unsigned int *)(dp + x -1);
-			dpp_d = *(unsigned int *)(dpp + x -1);
-			dpn_d = *(unsigned int *)(dpn + x -1);//範囲(Width)を超えてアクセスするので注意
 
 			//if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
 			//dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
@@ -3271,7 +3288,7 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 				((dpp_d & 0x00FCFCFC) ==0) &&
 				((dpn_d & 0x00FCFCFC) ==0 ))	continue;
 
-			dstp[x]++;
+			dstp[x]=1;	//+=1
 
 			//if (dp[x] <= 19) continue;
 			if( ((dp_d>>8) &0x00ff) <= 19) continue;
@@ -3281,8 +3298,8 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 			bool upper = 0;
 
 			//__m128i temp;
-			temp = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
-			temp = _mm_subs_epu8( temp, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
+			auto temp2 = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
+			temp = _mm_subs_epu8( temp2, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
 			temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
 			int ans = _mm_movemask_epi8( temp );	// temp[] <=19 ? 1 : 0 各バイトの最上位ビットを抽出
 			ans =~ans;								// temp[] > 19 ? 1 : 0 上位が1になるので注意
@@ -3291,11 +3308,11 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 			count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
 			if (count <= 2) continue;
 
-			upper = ((ans & 0x0007) != 0) ? 1 : 0;	//dpp_dで加算 true/falseの方が良いような・・・
+			upper = ((ans & 0x0007) != 0) ? 1 : 0;	//dpp_dで加算
 			lower = ((ans & 0x0700) != 0) ? 1 : 0;	//dpn_dで加算
 
 			if (upper && lower) {					//dpp/dpnで両方加算
-				dstp[x] += 2;
+				dstp[x] = 3;	//+=2
 				continue;
 			}
 
@@ -3306,10 +3323,10 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 			if (start < 0) start = 0;
 
 			int end = x + 5;				//  p3
-			if (end > Width) end = Width;
+			if (end > Width) end = Width;	//本当はWidth-1では？
 
 			//p4 :
-			if (y != 2) {
+			if (y > 2) {	//!=
 				for (int ii=start; ii<end; ii++){
 					if (dppp[ii] > 19) {
 						upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
@@ -3335,7 +3352,7 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 				}
 			}
 
-			if (y != Height - 4) {
+			if (y < Height - 4) {	//!=
 				for (int ii=start; ii<end; ii++){
 					if (dpnn[ii] > 19) {
 						lower2 = 1;
@@ -3349,20 +3366,20 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 			if (upper == 0) {
 				if (lower == 0 || lower2 == 0) {	// p17:
 					if (count > 4){
-						dstp[x] += 4;
+						dstp[x] = 5;	//+=4
 					}
 				}
 				else {
-					dstp[x] += 2;	// p18
+					dstp[x] = 3;	// p18	+=2
 				}
 			}
 			else {	//upper=1
 				if (lower != 0 || upper2 != 0) {
-					dstp[x] += 2;
+					dstp[x] = 3;		//+=2
 				}
 				else {
 					if (count > 4){
-						dstp[x] += 4;
+						dstp[x] = 5;	//+=4
 					}
 				}
 			}

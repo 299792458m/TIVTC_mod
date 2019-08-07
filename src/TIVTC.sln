@@ -7,6 +7,9 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TDeinterlace", "TDeint\TDeinterlace.vcxproj", "{BE5ED76D-6C67-48B1-84C4-DA163B6E90E8}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8DA602A4-4789-4A51-BAD8-B0A412022DC2}"
+	ProjectSection(SolutionItems) = preProject
+		パフォーマンス3.psess = パフォーマンス3.psess
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(Performance) = preSolution
@@ -39,6 +42,15 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {67BF8C1A-4186-49F4-8FED-5887C5EFB165}
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
