@@ -3222,34 +3222,34 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 	int Width, int tpitch)
 {
 	const unsigned char *dppp = tbuffer - tpitch;
-	const unsigned char *dpp = tbuffer;
-	const unsigned char *dp = tbuffer + tpitch;
-	const unsigned char *dpn = tbuffer + tpitch * 2;
+	const unsigned char *dpp  = tbuffer;
+	const unsigned char *dp   = tbuffer + tpitch;
+	const unsigned char *dpn  = tbuffer + tpitch * 2;
 	const unsigned char *dpnn = tbuffer + tpitch * 3;
 
 	for (int y = 2; y < Height - 2; y += 2) {
 
-		unsigned int dp_d,dpp_d,dpn_d;
-		unsigned int tmpi;
-
 		for (int x=1; x < Width - 1; x++){
 
+			unsigned int dp_d,dpp_d,dpn_d;
+			unsigned int tmpi;
+
 			auto temp = _mm_loadu_si128((__m128i *)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
-			dp_d = *(unsigned int *)(dp + x -1);	//下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
-			dpp_d = *(unsigned int *)(dpp + x -1);
-			dpn_d = *(unsigned int *)(dpn + x -1);	//範囲(Width)を超えてアクセスするので注意
+			dp_d  = *(unsigned int *)(dp + x -1);				//下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
+			dpp_d = *(unsigned int *)(dp + x -1 -tpitch);
+			dpn_d = *(unsigned int *)(dp + x -1 +tpitch);		//範囲(Width)を超えてアクセスするので注意
 
 
 			//16byteスキップ
 			if (_mm_testz_si128(temp, _mm_set1_epi8(-4))){	//sse4.1
-				x+=16;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
-
 				do{	//連続スキップ用 あまり効果なし？
-					temp = _mm_loadu_si128((__m128i *)(dp + x));
+					temp = _mm_loadu_si128((__m128i *)(dp + x+16));
 					if(_mm_testz_si128(temp, _mm_set1_epi8(-4))){
 						x+=16;
 					}
 					else{
+						x+=16;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
+
 						break;
 					}
 				}
@@ -3281,32 +3281,37 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 				continue;
 			}
 
+			//8近傍がすべて<=3でスキップ
 			//if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
 			//dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
 			//dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
-			if (((dp_d  & 0x00FC00FC) ==0) &&
-				((dpp_d & 0x00FCFCFC) ==0) &&
-				((dpn_d & 0x00FCFCFC) ==0 ))	continue;
+
+			auto dpnpd128 = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
+			//if (((dp_d  & 0x00FC00FC) ==0) && ((dpp_d & 0x00FCFCFC) ==0) && ((dpn_d & 0x00FCFCFC) ==0 ))	continue;
+			if ( _mm_testz_si128(dpnpd128, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
 
 			dstp[x]=1;	//+=1
 
+			//カレントのdp<=19でスキップ
 			//if (dp[x] <= 19) continue;
 			if( ((dp_d>>8) &0x00ff) <= 19) continue;
 
-			int count = 0;
-			bool lower = 0;
-			bool upper = 0;
-
 			//__m128i temp;
-			auto temp2 = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
-			temp = _mm_subs_epu8( temp2, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
+			temp = _mm_subs_epu8( dpnpd128, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
 			temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
 			int ans = _mm_movemask_epi8( temp );	// temp[] <=19 ? 1 : 0 各バイトの最上位ビットを抽出
 			ans =~ans;								// temp[] > 19 ? 1 : 0 上位が1になるので注意
 			ans = ans & 0x0757;						//不要部分(dp[x],[x+2])を無視
 
+			int count = 0;
+
 			count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
 			if (count <= 2) continue;
+
+			bool upper  = 0;
+			bool upper2 = 0;
+			bool lower  = 0;
+			bool lower2 = 0;
 
 			upper = ((ans & 0x0007) != 0) ? 1 : 0;	//dpp_dで加算
 			lower = ((ans & 0x0700) != 0) ? 1 : 0;	//dpn_dで加算
@@ -3315,51 +3320,97 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 				dstp[x] = 3;	//+=2
 				continue;
 			}
-
-			bool lower2 = 0;
-			bool upper2 = 0;
+			//以降upper|lowerの片方のみフラグあり
 
 			int start = x - 4;				// b11
 			if (start < 0) start = 0;
 
 			int end = x + 5;				//  p3
-			if (end > Width) end = Width;	//本当はWidth-1では？
+			if (end > Width) end = Width;	//
 
-			//p4 :
-			if (y > 2) {	//!=
-				for (int ii=start; ii<end; ii++){
-					if (dppp[ii] > 19) {
-						upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
-						break;
-					}
-				}
+			////p4 :
+			//if (y > 2) {	//!=
+			//	for (int ii=start; ii<end; ii++){
+			//		if (dppp[ii] > 19) {
+			//			upper2 = 1;  // ??? check others copied from here! todo change upper to upper2 if not upper 2 like in YUY2 part
+			//			break;
+			//		}
+			//	}
+			//}
+
+			//if(upper){
+			//	for (int ii=start; ii<end; ii++){
+			//		if (dpn[ii] > 19){
+			//			lower = 1;
+			//			break;
+			//		}
+			//	}
+			//}
+			//else{	//lower==1
+			//	for (int ii=start; ii<end; ii++){
+			//		if (dpp[ii] > 19){
+			//			upper = 1;
+			//			break;
+			//		}
+			//	}
+			//}
+
+			//if (y < Height - 4) {	//!=
+			//	for (int ii=start; ii<end; ii++){
+			//		if (dpnn[ii] > 19) {
+			//			lower2 = 1;
+			//			break;
+			//		}
+			//	}
+			//}
+
+			__m128i  msk;
+			int size = (end - start);
+			//msk.m128i_u64[1] = (size > 8) ? ( ( (long long)1 << (8*(size -8)) ) -1 ) : 0;	//mskの上位 sizeはMAX9byteなので、実は0かffのみにしかならない
+			//msk.m128i_u64[1] = (size > 8) ? 255 : 0;	//mskの上位 sizeはMAX9byteなので、実は0かffのみにしかならない
+			//msk.m128i_u64[0] = ( ( (long long)1 << (8*size) ) -1 );
+			//64bitの演算をするより↓の方が早い気が
+			switch(size){
+			case 0:				msk = _mm_set_epi32(0,0,0,0);				break;
+			case 1:				msk = _mm_set_epi32(0,0,0,0xff);			break;
+			case 2:				msk = _mm_set_epi32(0,0,0,0xffff);				break;
+			case 3:				msk = _mm_set_epi32(0,0,0,0xffffff);				break;
+			case 4:				msk = _mm_set_epi32(0,0,0,0xffffffff);				break;
+			case 5:				msk = _mm_set_epi32(0,0,0xff,0xffffffff);				break;
+			case 6:				msk = _mm_set_epi32(0,0,0xffff,0xffffffff);				break;
+			case 7:				msk = _mm_set_epi32(0,0,0xffffff,0xffffffff);				break;
+			case 8:				msk = _mm_set_epi32(0,0,0xffffffff,0xffffffff);				break;
+			default:case 9:		msk = _mm_set_epi32(0,0xff,0xffffffff,0xffffffff);				break;
 			}
 
+			if (y != 2) {	// >
+				temp  = _mm_loadu_si128((__m128i *)(dppp + start));
+				temp  = _mm_min_epu8(temp,_mm_set1_epi8(127));	//本当はepu8で比較したいが、命令がないので、128以上は127に丸める？
+				temp  = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+				upper2= (_mm_testz_si128(temp,msk)) ? 0 : 1;	//==0で1なので、反転 sete/setneという命令で反転できるから↓の小細工不要？
+				//temp = _mm_subs_epu8( temp, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
+				//temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
+				//upper2= _mm_testz_si128(temp,msk);
+			}
 			if(upper){
-				for (int ii=start; ii<end; ii++){
-					if (dpn[ii] > 19){
-						lower = 1;
-						break;
-					}
-				}
+				temp   = _mm_loadu_si128((__m128i *)(dpn + start));
+				temp  = _mm_min_epu8(temp,_mm_set1_epi8(127));	
+				temp  = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+				lower = (_mm_testz_si128(temp,msk)) ? 0 : 1;
 			}
 			else{	//lower==1
-				for (int ii=start; ii<end; ii++){
-					if (dpp[ii] > 19){
-						upper = 1;
-						break;
-					}
-				}
+				temp   = _mm_loadu_si128((__m128i *)(dpp + start));
+				temp  = _mm_min_epu8(temp,_mm_set1_epi8(127));	
+				temp  = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+				upper = (_mm_testz_si128(temp,msk)) ? 0 : 1;
+			}
+			if (y != Height - 4) {	// <
+				temp  = _mm_loadu_si128((__m128i *)(dpnn + start));
+				temp  = _mm_min_epu8(temp,_mm_set1_epi8(127));	
+				temp  = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+				lower2= (_mm_testz_si128(temp,msk)) ? 0 : 1;
 			}
 
-			if (y < Height - 4) {	//!=
-				for (int ii=start; ii<end; ii++){
-					if (dpnn[ii] > 19) {
-						lower2 = 1;
-						break;
-					}
-				}
-			}
 
 
 			//p13 :
