@@ -785,24 +785,28 @@ void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
   int height)
 {
 #ifdef USE_INTR
-/*	if (!(width & 31)) avx2Ç…ÇµÇƒÇ›ÇΩÇØÇ«ïœÇÌÇÁÇ»Ç©Ç¡ÇΩ
-	{
-		while (height--) {
-			for (int x = 0; x < width; x += 32)
-			{
-				auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i *>(prvp + x));
-				auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i *>(nxtp + x));
-				auto diffpn = _mm256_subs_epu8(src_prev, src_next);
-				auto diffnp = _mm256_subs_epu8(src_next, src_prev);
-				auto diff   = _mm256_or_si256(diffpn, diffnp);
-				_mm256_store_si256(reinterpret_cast<__m256i *>(dstp + x), diff);
-			}
-			prvp += prv_pitch;
-			nxtp += nxt_pitch;
-			dstp += dst_pitch;
-		}
-	}
-	else */
+	//if (!(width & 31)) //avx2Ç…ÇµÇƒÇ›ÇΩÇØÇ«ïœÇÌÇÁÇ»Ç©Ç¡ÇΩ
+	//{
+	//	while (height--) {
+	//		for (int x = 0; x < width; x += 32)
+	//		{
+	//			auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i *>(prvp + x));
+	//			auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i *>(nxtp + x));
+	//			//auto diffpn = _mm256_subs_epu8(src_prev, src_next);
+	//			//auto diffnp = _mm256_subs_epu8(src_next, src_prev);
+	//			//auto diff   = _mm256_or_si256(diffpn, diffnp);
+	//			auto diffmax= _mm256_max_epu8(src_prev, src_next);	//Ç±ÇÒÇ»ÇÃÇ‡Ç†ÇË
+	//			auto diffmin= _mm256_min_epu8(src_prev, src_next);
+	//			auto diff   = _mm256_subs_epu8(diffmax, diffmin);
+	//			_mm256_store_si256(reinterpret_cast<__m256i *>(dstp + x), diff);
+	//		}
+	//		prvp += prv_pitch;
+	//		nxtp += nxt_pitch;
+	//		dstp += dst_pitch;
+	//	}
+	//	_mm256_zeroupper();
+	//}
+	//else 
 	if (!(width & 15))
 	  {
 		while (height--) {
@@ -810,9 +814,9 @@ void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
 		  {
 			__m128i src_prev = _mm_load_si128(reinterpret_cast<const __m128i *>(prvp + x));
 			__m128i src_next = _mm_load_si128(reinterpret_cast<const __m128i *>(nxtp + x));
-			__m128i diffpn = _mm_subs_epu8(src_prev, src_next);
-			__m128i diffnp = _mm_subs_epu8(src_next, src_prev);
-			__m128i diff = _mm_or_si128(diffpn, diffnp);
+			__m128i diffpn = _mm_subs_epu8(src_prev, src_next);	//ïâÇæÇ∆0
+			__m128i diffnp = _mm_subs_epu8(src_next, src_prev);	//ïâÇæÇ∆0
+			__m128i diff = _mm_or_si128(diffpn, diffnp);		//ê≥ÇÃåãâ ÇæÇØécÇÈ
 			_mm_store_si128(reinterpret_cast<__m128i *>(dstp + x), diff);
 		  }
 		  prvp += prv_pitch;
