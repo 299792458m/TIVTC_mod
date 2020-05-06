@@ -67,6 +67,9 @@
   void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
     unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height);
   
+  void buildABSDiffMask_AVX2(const unsigned char *prvp, const unsigned char *nxtp,
+	  unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height);
+
   void buildABSDiffMask2_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
     unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height);
   

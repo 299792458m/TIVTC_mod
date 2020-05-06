@@ -26,6 +26,7 @@
 #include <windows.h>
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#include <immintrin.h>
 #include "avisynth.h"
 #include "internal.h"
 

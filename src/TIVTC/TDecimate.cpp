@@ -3483,7 +3483,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   }
   if (mode < 5 || mode == 7)
   {
-    diff = (unsigned __int64 *)_aligned_malloc((((vi.width + xhalfS) >> xshiftS) + 1)*(((vi.height + yhalfS) >> yshiftS) + 1) * 4 * sizeof(unsigned __int64), 16);
+    diff = (unsigned __int64 *)_aligned_malloc((((vi.width + xhalfS) >> xshiftS) + 1)*(((vi.height + yhalfS) >> yshiftS) + 1) * 4 * sizeof(unsigned __int64), 64);
     if (diff == NULL) env->ThrowError("TDecimate:  malloc failure (diff)!");
   }
   if (*output)

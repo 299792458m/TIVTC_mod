@@ -1491,64 +1491,69 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
     curf_pitch = src_pitch << 1;
     if (b == 0) { y0a = y0; y1a = y1; tp = tpitchy; }
     else { y0a = y0 >> 1; y1a = y1 >> 1; tp = tpitchuv; } // YV12 specific
-    if (match1 < 3)
-    {
-      curf = srcp + ((3 - field)*src_pitch);
-      mapp = mapp + ((field == 1 ? 1 : 2)*map_pitch);
-    }
+	int fieldn1 = (field == 0) ? 2 : 1;
+	int fieldn2 = (field == 0) ? 1 : 2;
+
     if (match1 == 0)
     {
+	  curf = srcp + ((3 - field)*src_pitch);	//for match1<3
       prvf_pitch = prv_pitch << 1;
-      prvpf = prvp + ((field == 1 ? 1 : 2)*prv_pitch);
-    }
+      prvpf = prvp + (fieldn1*prv_pitch);
+	  mapp = mapp + (fieldn1*map_pitch);
+	}
     else if (match1 == 1)
     {
+	  curf = srcp + ((3 - field)*src_pitch);	//for match1<3
       prvf_pitch = src_pitch << 1;
-      prvpf = srcp + ((field == 1 ? 1 : 2)*src_pitch);
-    }
+      prvpf = srcp + (fieldn1*src_pitch);
+	  mapp = mapp + (fieldn1*map_pitch);
+	}
     else if (match1 == 2)
     {
+	  curf = srcp + ((3 - field)*src_pitch);	//for match1<3
       prvf_pitch = nxt_pitch << 1;
-      prvpf = nxtp + ((field == 1 ? 1 : 2)*nxt_pitch);
-    }
+      prvpf = nxtp + (fieldn1*nxt_pitch);
+	  mapp = mapp + (fieldn1*map_pitch);
+	}
     else if (match1 == 3)
     {
       curf = srcp + ((2 + field)*src_pitch);
       prvf_pitch = prv_pitch << 1;
-      prvpf = prvp + ((field == 1 ? 2 : 1)*prv_pitch);
-      mapp = mapp + ((field == 1 ? 2 : 1)*map_pitch);
+      prvpf = prvp + (fieldn2*prv_pitch);
+      mapp = mapp + (fieldn2*map_pitch);
     }
     else if (match1 == 4)
     {
       curf = srcp + ((2 + field)*src_pitch);
       prvf_pitch = nxt_pitch << 1;
-      prvpf = nxtp + ((field == 1 ? 2 : 1)*nxt_pitch);
-      mapp = mapp + ((field == 1 ? 2 : 1)*map_pitch);
+      prvpf = nxtp + (fieldn2*nxt_pitch);
+      mapp = mapp + (fieldn2*map_pitch);
     }
+
     if (match2 == 0)
     {
       nxtf_pitch = prv_pitch << 1;
-      nxtpf = prvp + ((field == 1 ? 1 : 2)*prv_pitch);
+      nxtpf = prvp + (fieldn1*prv_pitch);
     }
     else if (match2 == 1)
     {
       nxtf_pitch = src_pitch << 1;
-      nxtpf = srcp + ((field == 1 ? 1 : 2)*src_pitch);
+      nxtpf = srcp + (fieldn1*src_pitch);
     }
     else if (match2 == 2)
     {
       nxtf_pitch = nxt_pitch << 1;
-      nxtpf = nxtp + ((field == 1 ? 1 : 2)*nxt_pitch);
+      nxtpf = nxtp + (fieldn1*nxt_pitch);
     }
     else if (match2 == 3)
     {
       nxtf_pitch = prv_pitch << 1;
-      nxtpf = prvp + ((field == 1 ? 2 : 1)*prv_pitch);
+      nxtpf = prvp + (fieldn2*prv_pitch);
     }
     else if (match2 == 4)
     {
       nxtf_pitch = nxt_pitch << 1;
-      nxtpf = nxtp + ((field == 1 ? 2 : 1)*nxt_pitch);
+      nxtpf = nxtp + (fieldn2*nxt_pitch);
     }
     prvppf = prvpf - prvf_pitch;
     prvnf = prvpf + prvf_pitch;
@@ -1735,6 +1740,7 @@ int TFM::compareFieldsSlow2(PVideoFrame &prv, PVideoFrame &src, PVideoFrame &nxt
 							accumPc, accumNc,accumPm, accumNm, accumPml, accumNml);
 					
 						int sft=0;//field==0 ? 3 : 0;
+
 						compareFieldsSlowCal2_SSE41(ebx,eax,readmsk,sft,
 							t_prvpf, t_prvnf,t_prvnnf,
 							t_curf, t_curnf,
@@ -2576,7 +2582,12 @@ void TFM::buildABSDiffMask(const unsigned char *prvp, const unsigned char *nxtp,
 		else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
 		else if (opt == 3) cpu |= 0x2C;
 	}
-	if ((cpu&CPUF_SSE2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch) & 15))
+	if ((cpu&CPUF_AVX2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch | width) & 31))
+	{
+		buildABSDiffMask_AVX2(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch,
+			width, height);
+	}
+	else if ((cpu&CPUF_SSE2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch) & 15))
 	{
 		// aligned. 
 		// different path if not mod16, but only for remaining 8 bytes
@@ -2727,7 +2738,7 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
   if (mode == 1 || mode == 2 || mode == 3 || mode == 5 || mode == 6 || mode == 7 ||
     PP > 0 || micout > 0 || micmatching > 0)
   {
-    cArray = (int *)_aligned_malloc((((vi.width + xhalf) >> xshift) + 1)*(((vi.height + yhalf) >> yshift) + 1) * 4 * sizeof(int), 16);
+    cArray = (int *)_aligned_malloc((((vi.width + xhalf) >> xshift) + 1)*(((vi.height + yhalf) >> yshift) + 1) * 4 * sizeof(int), 64);
     if (!cArray) env->ThrowError("TFM:  malloc failure (cArray)!");
     cmask = new PlanarFrame(vi, true);
   }

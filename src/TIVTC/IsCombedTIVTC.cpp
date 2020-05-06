@@ -124,7 +124,7 @@ ShowCombedTIVTC::ShowCombedTIVTC(PClip _child, int _cthresh, bool _chroma, int _
   yshift = blocky == 4 ? 2 : blocky == 8 ? 3 : blocky == 16 ? 4 : blocky == 32 ? 5 :
     blocky == 64 ? 6 : blocky == 128 ? 7 : blocky == 256 ? 8 : blocky == 512 ? 9 :
     blocky == 1024 ? 10 : 11;
-  cArray = (int *)_aligned_malloc((((vi.width + xhalf) >> xshift) + 1)*(((vi.height + yhalf) >> yshift) + 1) * 4 * sizeof(int), 16);
+  cArray = (int *)_aligned_malloc((((vi.width + xhalf) >> xshift) + 1)*(((vi.height + yhalf) >> yshift) + 1) * 4 * sizeof(int), 64);
   if (!cArray)
     env->ThrowError("ShowCombedTIVTC:  malloc failure (cArray)!");
   cmask = new PlanarFrame(vi, true);

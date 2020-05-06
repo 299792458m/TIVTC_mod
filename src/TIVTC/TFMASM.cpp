@@ -785,28 +785,6 @@ void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
   int height)
 {
 #ifdef USE_INTR
-	//if (!(width & 31)) //avx2にしてみたけど変わらなかった
-	//{
-	//	while (height--) {
-	//		for (int x = 0; x < width; x += 32)
-	//		{
-	//			auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i *>(prvp + x));
-	//			auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i *>(nxtp + x));
-	//			//auto diffpn = _mm256_subs_epu8(src_prev, src_next);
-	//			//auto diffnp = _mm256_subs_epu8(src_next, src_prev);
-	//			//auto diff   = _mm256_or_si256(diffpn, diffnp);
-	//			auto diffmax= _mm256_max_epu8(src_prev, src_next);	//こんなのもあり
-	//			auto diffmin= _mm256_min_epu8(src_prev, src_next);
-	//			auto diff   = _mm256_subs_epu8(diffmax, diffmin);
-	//			_mm256_store_si256(reinterpret_cast<__m256i *>(dstp + x), diff);
-	//		}
-	//		prvp += prv_pitch;
-	//		nxtp += nxt_pitch;
-	//		dstp += dst_pitch;
-	//	}
-	//	_mm256_zeroupper();
-	//}
-	//else 
 	if (!(width & 15))
 	  {
 		while (height--) {
@@ -920,6 +898,29 @@ void buildABSDiffMask_SSE2(const unsigned char *prvp, const unsigned char *nxtp,
 #endif
 }
 
+void buildABSDiffMask_AVX2(const unsigned char *prvp, const unsigned char *nxtp,
+	unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width,
+	int height)
+{
+	while (height--) {
+		for (int x = 0; x < width; x += 32)
+		{
+			auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i *>(prvp + x));
+			auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i *>(nxtp + x));
+			//auto diffpn = _mm256_subs_epu8(src_prev, src_next);
+			//auto diffnp = _mm256_subs_epu8(src_next, src_prev);
+			//auto diff   = _mm256_or_si256(diffpn, diffnp);
+			auto diffmax = _mm256_max_epu8(src_prev, src_next);	//こんなのもあり
+			auto diffmin = _mm256_min_epu8(src_prev, src_next);
+			auto diff = _mm256_subs_epu8(diffmax, diffmin);
+			_mm256_stream_si256(reinterpret_cast<__m256i *>(dstp + x), diff);
+		}
+		prvp += prv_pitch;
+		nxtp += nxt_pitch;
+		dstp += dst_pitch;
+	}
+	_mm256_zeroupper();
+}
 #ifdef ALLOW_MMX
 void buildABSDiffMask_MMX(const unsigned char *prvp, const unsigned char *nxtp,
   unsigned char *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width,
@@ -2624,8 +2625,9 @@ void compute_sum_8x8_sse2(const unsigned char *srcp, int pitch, int &sum)
   __m128i zero = _mm_setzero_si128();
   __m128i summa = _mm_setzero_si128();
   srcp += pitch * 2;
-  for (int i = 0; i < 4; i++) { // 4x2=8
-	  __m128i curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
+  //for (int i = 0; i < 4; i++) { // 4x2=8
+  {
+	__m128i curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
     __m128i curr1 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp + pitch));
 
     __m128i prev_anded = _mm_and_si128(prev0, prev1_currMinus1);
@@ -2642,6 +2644,61 @@ void compute_sum_8x8_sse2(const unsigned char *srcp, int pitch, int &sum)
     summa = _mm_adds_epu8(summa, prev_anded);
     summa = _mm_adds_epu8(summa, curr_anded);
     srcp += pitch * 2;
+
+	curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
+	curr1 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp + pitch));
+
+	prev_anded = _mm_and_si128(prev0, prev1_currMinus1);
+	prev_anded = _mm_and_si128(prev_anded, curr0_prev2); // prev0 prev1 prev2
+	prev_anded = _mm_and_si128(prev_anded, onesMask);
+
+	curr_anded = _mm_and_si128(curr0_prev2, curr1);
+	curr_anded = _mm_and_si128(curr_anded, prev1_currMinus1); // currMinus1 curr0 curr1
+	curr_anded = _mm_and_si128(curr_anded, onesMask);
+
+	prev0 = curr0_prev2;
+	prev1_currMinus1 = curr1;
+
+	summa = _mm_adds_epu8(summa, prev_anded);
+	summa = _mm_adds_epu8(summa, curr_anded);
+	srcp += pitch * 2;
+
+	curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
+	curr1 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp + pitch));
+
+	prev_anded = _mm_and_si128(prev0, prev1_currMinus1);
+	prev_anded = _mm_and_si128(prev_anded, curr0_prev2); // prev0 prev1 prev2
+	prev_anded = _mm_and_si128(prev_anded, onesMask);
+
+	curr_anded = _mm_and_si128(curr0_prev2, curr1);
+	curr_anded = _mm_and_si128(curr_anded, prev1_currMinus1); // currMinus1 curr0 curr1
+	curr_anded = _mm_and_si128(curr_anded, onesMask);
+
+	prev0 = curr0_prev2;
+	prev1_currMinus1 = curr1;
+
+	summa = _mm_adds_epu8(summa, prev_anded);
+	summa = _mm_adds_epu8(summa, curr_anded);
+	srcp += pitch * 2;
+
+	curr0_prev2 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp));
+	curr1 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(srcp + pitch));
+
+	prev_anded = _mm_and_si128(prev0, prev1_currMinus1);
+	prev_anded = _mm_and_si128(prev_anded, curr0_prev2); // prev0 prev1 prev2
+	prev_anded = _mm_and_si128(prev_anded, onesMask);
+
+	curr_anded = _mm_and_si128(curr0_prev2, curr1);
+	curr_anded = _mm_and_si128(curr_anded, prev1_currMinus1); // currMinus1 curr0 curr1
+	curr_anded = _mm_and_si128(curr_anded, onesMask);
+
+	prev0 = curr0_prev2;
+	prev1_currMinus1 = curr1;
+
+	summa = _mm_adds_epu8(summa, prev_anded);
+	summa = _mm_adds_epu8(summa, curr_anded);
+	srcp += pitch * 2;
+
   }
   // now we have to sum up lower 8 bytes
   // in sse2, we use sad
@@ -3238,78 +3295,73 @@ void buildDiffMapPlaneYV12_SSE42(const unsigned char *tbuffer,
 			unsigned int dp_d,dpp_d,dpn_d;
 			unsigned int tmpi;
 
-			auto temp = _mm_loadu_si128((__m128i *)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
-			dp_d  = *(unsigned int *)(dp + x -1);				//下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
-			dpp_d = *(unsigned int *)(dp + x -1 -tpitch);
-			dpn_d = *(unsigned int *)(dp + x -1 +tpitch);		//範囲(Width)を超えてアクセスするので注意
+			dp_d  = *(unsigned int *)(dp + x -1);				//-1,0,1,2の4個分入れておく 下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
 
-
-			//16byteスキップ
-			if (_mm_testz_si128(temp, _mm_set1_epi8(-4))){	//sse4.1
-				do{	//連続スキップ用 あまり効果なし？
-					temp = _mm_loadu_si128((__m128i *)(dp + x+16));
-					if(_mm_testz_si128(temp, _mm_set1_epi8(-4))){
-						x+=16;
-					}
-					else{
-						x+=16;	//中で弄るのは良くないが・・・ continue後に+1されるのを忘れずに
-
-						break;
-					}
-				}
-				while(x < Width-1);
-
-				x--;	//continue時に++されるから
-				continue;
-			}
-
-			//16byte未満でスキップ
+			//現pixelが-3未満でスキップ
 			//if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4)))
 			if( (dp_d & 0x0000FC00) == 0)
 			{
+				auto temp = _mm_loadu_si128((__m128i *)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
+				if (_mm_testz_si128(temp, _mm_set1_epi8(-4))) {	//sse4.1
+					do{	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
+						x += 16;
+						temp = _mm_loadu_si128((__m128i *)(dp + x));
+					}
+					while ((_mm_testz_si128(temp, _mm_set1_epi8(-4))) && (x < Width));
+					x--;	//continue時に++されるから
+					continue;
+				}
+
 				temp = _mm_and_si128( temp, _mm_set1_epi8( -4 ) );	// subs(0.5cpi)よりも速い(0.33cpi)
 				temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	// <=3 ? ff : 0
 				tmpi = _mm_movemask_epi8( temp );	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
-				tmpi= ~tmpi;						//temp[] <=3 ? 0 : 1  上位16bitには1が入る andnotを使うよりも何故か速い
+				tmpi= ~tmpi;						// temp[] <=3 ? 0 : 1  上位16bitには1が入る andnotを使うよりも何故か速い
 
 				//この時点で <=3 ? 0 : 1
 
-				//tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) どっちでも速度が変わらない？
-				//x += tmpi-1;				//continue後(forのpost)に+1されるので-1
-				//continue;
+				//tzcntの場合(BMIが使える≒AVX2)
+				//tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) bsfより高速
+				//x += tmpi-1;continue;		//continue後(forのpost)に+1されるので-1
 
-				//bsfの場合
-				long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
-				_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
-				x += tmpl-1;					//continue後(forのpost)に+1されるので-1
-				continue;
+				//popcntで代替≒SSE42
+				tmpi = _mm_popcnt_u32( ~tmpi & (tmpi-1));	//ちょっとだけ遅いが・・・SSE時はこちら
+				x += tmpi-1;continue;		//continue後(forのpost)に+1されるので-1
+				//x += tmpi;				//continueしない場合
+
+				//bsfの場合 POPCNTも使えないならこうなる
+				//long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
+				//_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
+				//x += tmpl-1;					//continue後(forのpost)に+1されるので-1
+				//continue;
 			}
 
 			//8近傍がすべて<=3でスキップ
 			//if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
 			//dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
 			//dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+			dpp_d = *(unsigned int *)(dp + x - 1 - tpitch);
+			dpn_d = *(unsigned int *)(dp + x - 1 + tpitch);		//範囲(Width)を超えてアクセスするので注意
 
-			auto dpnpd128 = _mm_set_epi32( 0, dpn_d, dp_d, dpp_d );	//dpn,dp.dppの順
-			//if (((dp_d  & 0x00FC00FC) ==0) && ((dpp_d & 0x00FCFCFC) ==0) && ((dpn_d & 0x00FCFCFC) ==0 ))	continue;
-			if ( _mm_testz_si128(dpnpd128, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
+			if (((dp_d & 0x00FC00FC) == 0) && ((dpp_d & 0x00FCFCFC) == 0) && ((dpn_d & 0x00FCFCFC) == 0))	continue;
+			//if ( _mm_testz_si128(temp, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
 
 			dstp[x]=1;	//+=1
 
 			//カレントのdp<=19でスキップ
 			//if (dp[x] <= 19) continue;
-			if( ((dp_d>>8) &0x00ff) <= 19) continue;
+			if( (dp_d &0x0000ff00) <= 0x00001300 ) continue;
 
-			//__m128i temp;
-			temp = _mm_subs_epu8( dpnpd128, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
-			temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
+			//8近傍のdp<=19でスキップ
+			auto temp = _mm_set_epi32(0, dpn_d, dp_d, dpp_d);	//dpn,dp.dppの順
+			temp = _mm_subs_epu8(temp, _mm_set1_epi8(19) );		//unsignedでtemp[]-19  負になる場合は0 ==19以下は0
+			temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0 
+			//temp = _mm_min_epu8(temp, _mm_set1_epi8(127));	//本当はepu8で比較したいが、命令がないので、128以上は127に丸める？
+			//temp = _mm_sub_epi8(temp, _mm_set1_epi8(20));		//signedでtemp[]-20  負(最上位ビットが立つ)==19以下 でも128以上ある場合に使えない
 			int ans = _mm_movemask_epi8( temp );	// temp[] <=19 ? 1 : 0 各バイトの最上位ビットを抽出
 			ans =~ans;								// temp[] > 19 ? 1 : 0 上位が1になるので注意
 			ans = ans & 0x0757;						//不要部分(dp[x],[x+2])を無視
 
-			int count = 0;
-
-			count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
+			int count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
 			if (count <= 2) continue;
 
 			bool upper  = 0;

@@ -84,7 +84,7 @@ FrameDiff::FrameDiff(PClip _child, int _mode, bool _prevf, int _nt, int _blockx,
       else MAX_DIFF = (unsigned __int64)(219.0*blockx*blocky);
     }
   }
-  diff = (unsigned __int64 *)_aligned_malloc((((vi.width + xhalfS) >> xshiftS) + 1)*(((vi.height + yhalfS) >> yshiftS) + 1) * 4 * sizeof(unsigned __int64), 16);
+  diff = (unsigned __int64 *)_aligned_malloc((((vi.width + xhalfS) >> xshiftS) + 1)*(((vi.height + yhalfS) >> yshiftS) + 1) * 4 * sizeof(unsigned __int64), 64);
   if (diff == NULL) env->ThrowError("FrameDiff:  malloc failure (diff)!");
   nfrms = vi.num_frames - 1;
 #ifdef AVISYNTH_2_5

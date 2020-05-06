@@ -254,34 +254,48 @@ void fmemset_8_MMX(unsigned char* p, int sizec, __int64 val)
 
 void fmemset(long cpu, unsigned char *p, int sizec, int opt, int val)
 {
-//  if (opt != 4)
-//  {
-//    if (opt == 0) cpu &= ~0x2C;
-//    else if (opt == 1) { cpu &= ~0x28; cpu |= 0x04; }
-//    else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
-//    else if (opt == 3) cpu |= 0x2C;
-//  }
-//  if ((cpu&CPUF_SSE2) && !(sizec & 15))
-//  {
-//    __m128i v128 = _mm_set1_epi8(val);
-//    fmemset_16_SSE2(p, sizec, v128);
-//  }
-//#ifdef ALLOW_MMX
-//  else if ((cpu&CPUF_INTEGER_SSE) && !(sizec & 7))
-//  {
-//    __int64 v = (val << 8) + val;
-//    v += (v << 48) + (v << 32) + (v << 16);
-//    if (sizec & 15) fmemset_8_iSSE(p, sizec, v);
-//    else fmemset_16_iSSE(p, sizec, v);
-//  }
-//  else if ((cpu&CPUF_MMX) && !(sizec & 7))
-//  {
-//    __int64 v = (val << 8) + val;
-//    v += (v << 48) + (v << 32) + (v << 16);
-//    if (sizec & 15) fmemset_8_MMX(p, sizec, v);
-//    else fmemset_16_MMX(p, sizec, v);
-//  }
-//#endif
-//  else memset(p, val, sizec);
-	memset(p, val, sizec);	//•’Ê‚Émemset‚µ‚½•û‚ª‘‚»‚¤‚È‹C‚ª‚·‚é
+  if (opt != 4)
+  {
+    if (opt == 0) cpu &= ~0x2C;
+    else if (opt == 1) { cpu &= ~0x28; cpu |= 0x04; }
+    else if (opt == 2) { cpu &= ~0x20; cpu |= 0x0C; }
+    else if (opt == 3) cpu |= 0x2C;
+  }
+  if ((cpu&CPUF_AVX) && !(sizec & 31))
+  {
+	  //p‚àalign‚³‚ê‚Ä‚¢‚é•K—v‚ ‚é‚Ì‚Å’ˆÓ plannerframe‚ÌMIN_ALIGNMENT‚Æ‚©
+	  auto v = _mm256_set1_epi8(val);
+	  for (int i = 0; i < sizec; i += 32)
+	  {
+		  _mm256_stream_si256(reinterpret_cast<__m256i *>(p + i), v);
+	  }
+	  _mm256_zeroupper();
+  }
+  else
+  if ((cpu&CPUF_SSE2) && !(sizec & 15))
+  {
+	  __m128i v128 = _mm_set1_epi8(val);
+	  //  fmemset_16_SSE2(p, sizec, v128);
+	  for (int i = 0; i < sizec; i += 16)
+	  {
+		  _mm_stream_si128(reinterpret_cast<__m128i *>(p+i), v128);
+	  }
+  }
+#ifdef ALLOW_MMX
+  else if ((cpu&CPUF_INTEGER_SSE) && !(sizec & 7))
+  {
+    __int64 v = (val << 8) + val;
+    v += (v << 48) + (v << 32) + (v << 16);
+    if (sizec & 15) fmemset_8_iSSE(p, sizec, v);
+    else fmemset_16_iSSE(p, sizec, v);
+  }
+  else if ((cpu&CPUF_MMX) && !(sizec & 7))
+  {
+    __int64 v = (val << 8) + val;
+    v += (v << 48) + (v << 32) + (v << 16);
+    if (sizec & 15) fmemset_8_MMX(p, sizec, v);
+    else fmemset_16_MMX(p, sizec, v);
+  }
+#endif
+  else memset(p, val, sizec);
 }

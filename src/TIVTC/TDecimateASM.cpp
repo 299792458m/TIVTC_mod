@@ -751,13 +751,23 @@ void calcSAD_SSE2_16x16_unaligned(const unsigned char *ptr1, const unsigned char
   sad = _mm_cvtsi128_si32(sum);
 }
 
-void calcSAD_SSE2_16x16(const unsigned char *ptr1, const unsigned char *ptr2,
+inline void calcSAD_SSE2_16x16(const unsigned char *ptr1, const unsigned char *ptr2,
   int pitch1, int pitch2, int &sad)
 {
 #ifdef USE_INTR
     __m128i tmpsum = _mm_setzero_si128();
-    // unrolled loop
-    for (int i = 0; i < 2; i++) {
+
+	//for (int i = 0; i < 16; i++) {
+	//	__m128i xmm0,xmm1;
+	//	xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + i * pitch1)); //  movdqa xmm0, [edi]
+	//	xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2 + i * pitch2));
+	//	xmm0 = _mm_sad_epu8(xmm0, xmm1); // psadbw xmm0, [esi]
+
+	//	tmpsum = _mm_add_epi32(tmpsum, xmm0);
+	//}
+
+	// unrolled loop
+	{
       __m128i xmm0, xmm1;
       xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1)); //  movdqa xmm0, [edi]
       xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + pitch1)); //  movdqa xmm1, [edi + edx]
@@ -795,7 +805,44 @@ void calcSAD_SSE2_16x16(const unsigned char *ptr1, const unsigned char *ptr2,
       xmm1 = _mm_add_epi32(tmp3, tmp4);
       tmpsum = _mm_add_epi32(tmpsum, xmm0);
       tmpsum = _mm_add_epi32(tmpsum, xmm1);
-    }
+
+	  xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1)); //  movdqa xmm0, [edi]
+	  xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + pitch1)); //  movdqa xmm1, [edi + edx]
+	  xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2))); // psadbw xmm0, [esi]
+	  xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2 + pitch2))); // psadbw xmm1, [esi + ecx]
+	  ptr1 += pitch1 * 2; // lea edi, [edi + edx * 2]
+	  tmp1 = _mm_add_epi32(xmm0, xmm1); // paddd xmm0, xmm1
+	  ptr2 += pitch2 * 2; //lea esi, [esi + ecx * 2]
+
+	  xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1)); //  movdqa xmm0, [edi]
+	  xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + pitch1)); //  movdqa xmm1, [edi + edx]
+	  xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2))); // psadbw xmm0, [esi]
+	  xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2 + pitch2))); // psadbw xmm1, [esi + ecx]
+	  ptr1 += pitch1 * 2; // lea edi, [edi + edx * 2]
+	  tmp2 = _mm_add_epi32(xmm0, xmm1); // paddd xmm0, xmm1
+	  ptr2 += pitch2 * 2; //lea esi, [esi + ecx * 2]
+
+	  xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1)); //  movdqa xmm0, [edi]
+	  xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + pitch1)); //  movdqa xmm1, [edi + edx]
+	  xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2))); // psadbw xmm0, [esi]
+	  xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2 + pitch2))); // psadbw xmm1, [esi + ecx]
+	  ptr1 += pitch1 * 2; // lea edi, [edi + edx * 2]
+	  tmp3 = _mm_add_epi32(xmm0, xmm1); // paddd xmm0, xmm1
+	  ptr2 += pitch2 * 2; //lea esi, [esi + ecx * 2]
+
+	  xmm0 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1)); //  movdqa xmm0, [edi]
+	  xmm1 = _mm_load_si128(reinterpret_cast<const __m128i *>(ptr1 + pitch1)); //  movdqa xmm1, [edi + edx]
+	  xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2))); // psadbw xmm0, [esi]
+	  xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i *>(ptr2 + pitch2))); // psadbw xmm1, [esi + ecx]
+	  ptr1 += pitch1 * 2; // lea edi, [edi + edx * 2]
+	  tmp4 = _mm_add_epi32(xmm0, xmm1); // paddd xmm0, xmm1
+	  ptr2 += pitch2 * 2; //lea esi, [esi + ecx * 2]
+
+	  xmm0 = _mm_add_epi32(tmp1, tmp2);
+	  xmm1 = _mm_add_epi32(tmp3, tmp4);
+	  tmpsum = _mm_add_epi32(tmpsum, xmm0);
+	  tmpsum = _mm_add_epi32(tmpsum, xmm1);
+	}
     __m128i sum = _mm_add_epi32(tmpsum, _mm_srli_si128(tmpsum, 8)); // add lo, hi
     sad = _mm_cvtsi128_si32(sum);
 #else

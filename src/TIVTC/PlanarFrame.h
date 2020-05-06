@@ -29,7 +29,7 @@
 #include "internal.h"
 #include "memcpy_amd.h"
 
-#define MIN_ALIGNMENT 16
+#define MIN_ALIGNMENT 64
 
 #define PLANAR_420 1
 #define PLANAR_422 2
