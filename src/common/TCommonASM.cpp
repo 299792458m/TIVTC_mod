@@ -23,6 +23,7 @@
 #include "emmintrin.h"
 #include "smmintrin.h" // SSE4
 #include <algorithm>
+#include <intrin.h>
 
 void absDiff_SSE2(const uint8_t *srcp1, const uint8_t *srcp2,
   uint8_t *dstp, int src1_pitch, int src2_pitch, int dst_pitch, int width,
@@ -177,6 +178,37 @@ void buildABSDiffMask_SSE2(const uint8_t* prvp, const uint8_t* nxtp,
   }
 }
 
+template<typename pixel_t>
+void buildABSDiffMask_AVX2(const uint8_t* prvp, const uint8_t* nxtp, uint8_t* dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height)
+{
+    while (height--) {
+        for (int x = 0; x < width; x += 32)
+        {
+            auto src_prev = _mm256_load_si256(reinterpret_cast<const __m256i*>(prvp + x));
+            auto src_next = _mm256_load_si256(reinterpret_cast<const __m256i*>(nxtp + x));
+
+            __m256i diffpn, diffnp;
+            if constexpr (sizeof(pixel_t) == 1) {
+                diffpn = _mm256_subs_epu8(src_prev, src_next);
+                diffnp = _mm256_subs_epu8(src_next, src_prev);
+            }
+            else {
+                diffpn = _mm256_subs_epu16(src_prev, src_next);
+                diffnp = _mm256_subs_epu16(src_next, src_prev);
+            }
+            auto diff = _mm256_or_si256(diffpn, diffnp);
+
+            //auto diffmax = _mm256_max_epu8(src_prev, src_next);	//こんなのもあり
+            //auto diffmin = _mm256_min_epu8(src_prev, src_next);
+            //auto diff = _mm256_subs_epu8(diffmax, diffmin);
+            _mm256_store_si256(reinterpret_cast<__m256i*>(dstp + x), diff);
+        }
+        prvp += prv_pitch;
+        nxtp += nxt_pitch;
+        dstp += dst_pitch;
+    }
+    _mm256_zeroupper();
+}
 
 template<typename pixel_t, bool YUY2_LumaOnly>
 void buildABSDiffMask_c(const uint8_t* prvp, const uint8_t* nxtp,
@@ -225,7 +257,12 @@ void do_buildABSDiffMask(const uint8_t* prvp, const uint8_t* nxtp, uint8_t* tbuf
     const int rowsize = width * sizeof(pixel_t);
     const int rowsizemod8 = rowsize / 8 * 8;
     // SSE2 is not YUY2 chroma-ignore template, it's quicker if not skipping each YUY2 chroma
-    buildABSDiffMask_SSE2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
+    if ((cpuFlags & CPUF_AVX2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch | rowsizemod8) & 31))
+    {
+        buildABSDiffMask_AVX2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
+    }
+    else buildABSDiffMask_SSE2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
+
     if(YUY2_LumaOnly)
       buildABSDiffMask_c<pixel_t, true>(
         prvp + rowsizemod8, 
@@ -422,8 +459,182 @@ static AVS_FORCEINLINE void AnalyzeOnePixel(uint8_t* dstp,
   }
 }
 
+template<> 
+#if defined(GCC) || defined(CLANG)
+__attribute__((__target__("sse4.2")))
+#endif
+static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
+    const uint8_t* dppp, const uint8_t* dpp,
+    const uint8_t* dp,
+    const uint8_t* dpn, const uint8_t* dpnn,
+    int& x, int& y, int& Width, int& Height)
+{
+    unsigned int dp_d, dpp_d, dpn_d;
+    unsigned int tmpi;
+
+    dp_d = *(unsigned int*)(dp + x - 1);				//-1,0,1,2の4個分入れておく 下の方(使う直前)に置くとxの依存関係がうまく切り分けられない？のかアクセスが遅い
+
+    //現pixelが-3未満でスキップ
+    //if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4)))
+    if ((dp_d & 0x0000FC00) == 0)
+    {
+        auto temp = _mm_loadu_si128((__m128i*)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
+        if (_mm_testz_si128(temp, _mm_set1_epi8(-4))) {	//sse4.1
+            do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
+                x += 16;
+                temp = _mm_loadu_si128((__m128i*)(dp + x));
+            } while ((_mm_testz_si128(temp, _mm_set1_epi8(-4))) && (x < Width));
+            x--;	//continue時に++されるから
+            return;
+        }
+
+        temp = _mm_and_si128(temp, _mm_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
+        temp = _mm_cmpeq_epi8(temp, _mm_setzero_si128());	// <=3 ? ff : 0
+        tmpi = _mm_movemask_epi8(temp);	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
+        tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1  上位16bitには1が入る andnotを使うよりも何故か速い
+
+        //この時点で <=3 ? 0 : 1
+
+        //tzcntの場合(BMIが使える≒AVX2)
+        tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) bsfより高速
+        x += tmpi-1; return;		//continue後(forのpost)に+1されるので-1
+
+        //popcntで代替≒SSE42
+        //tmpi = _mm_popcnt_u32(~tmpi & (tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
+        //x += tmpi - 1; return;		//continue後(forのpost)に+1されるので-1
+        //x += tmpi;				//continueしない場合
+
+        //bsfの場合 POPCNTも使えないならこうなる
+        //long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
+        //_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
+        //x += tmpl-1;					//continue後(forのpost)に+1されるので-1
+        //continue;
+    }
+
+    //8近傍がすべて<=3でスキップ
+    //if (dp[x - 1] <= 3 && dp[x + 1] <= 3 &&
+    //dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
+    //dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
+    dpp_d = *(unsigned int*)(dpp + x - 1);
+    dpn_d = *(unsigned int*)(dpn + x - 1);		//範囲(Width)を超えてアクセスするので注意
+
+    if (((dp_d & 0x00FC00FC) == 0) && ((dpp_d & 0x00FCFCFC) == 0) && ((dpn_d & 0x00FCFCFC) == 0))	return;
+    //if ( _mm_testz_si128(temp, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
+
+    dstp[x] = 1;	//+=1
+
+    //カレントのdp<=19でスキップ
+    //if (dp[x] <= 19) continue;
+    if ((dp_d & 0x0000ff00) <= 0x00001300) return;
+
+    //8近傍のdp<=19でスキップ
+    auto temp = _mm_set_epi32(0, dpn_d, dp_d, dpp_d);	//dpn,dp.dppの順
+    temp = _mm_subs_epu8(temp, _mm_set1_epi8(19));		//unsignedでtemp[]-19  負になる場合は0 ==19以下は0
+    temp = _mm_cmpeq_epi8(temp, _mm_setzero_si128());	//temp[] <=19 ? ff : 0 
+    //temp = _mm_min_epu8(temp, _mm_set1_epi8(127));	//本当はepu8で比較したいが、命令がないので、128以上は127に丸める？
+    //temp = _mm_sub_epi8(temp, _mm_set1_epi8(20));		//signedでtemp[]-20  負(最上位ビットが立つ)==19以下 でも128以上ある場合に使えない
+    int ans = _mm_movemask_epi8(temp);	// temp[] <=19 ? 1 : 0 各バイトの最上位ビットを抽出
+    ans = ~ans;								// temp[] > 19 ? 1 : 0 上位が1になるので注意
+    ans = ans & 0x0757;						//不要部分(dp[x],[x+2])を無視
+
+    int count = _mm_popcnt_u32(ans);			//bitをカウント sse4.2要
+    if (count <= 2) return;
+
+    bool upper = 0;
+    bool upper2 = 0;
+    bool lower = 0;
+    bool lower2 = 0;
+
+    upper = ((ans & 0x0007) != 0) ? 1 : 0;	//dpp_dで加算
+    lower = ((ans & 0x0700) != 0) ? 1 : 0;	//dpn_dで加算
+
+    if (upper && lower) {					//dpp/dpnで両方加算
+        dstp[x] = 3;	//+=2
+        return;
+    }
+    //以降upper|lowerの片方のみフラグあり
+
+    int start = x - 4;				// b11
+    if (start < 0) start = 0;
+
+    int end = x + 5;				//  p3
+    if (end > Width) end = Width;	//
+
+    __m128i  msk;
+    int size = (end - start);
+    //msk.m128i_u64[1] = (size > 8) ? ( ( (long long)1 << (8*(size -8)) ) -1 ) : 0;	//mskの上位 sizeはMAX9byteなので、実は0かffのみにしかならない
+    //msk.m128i_u64[1] = (size > 8) ? 255 : 0;	//mskの上位 sizeはMAX9byteなので、実は0かffのみにしかならない
+    //msk.m128i_u64[0] = ( ( (long long)1 << (8*size) ) -1 );
+    //64bitの演算をするより↓の方が早い気が
+    switch (size) {
+    case 0:				msk = _mm_set_epi32(0, 0, 0, 0);				break;
+    case 1:				msk = _mm_set_epi32(0, 0, 0, 0xff);			break;
+    case 2:				msk = _mm_set_epi32(0, 0, 0, 0xffff);				break;
+    case 3:				msk = _mm_set_epi32(0, 0, 0, 0xffffff);				break;
+    case 4:				msk = _mm_set_epi32(0, 0, 0, 0xffffffff);				break;
+    case 5:				msk = _mm_set_epi32(0, 0, 0xff, 0xffffffff);				break;
+    case 6:				msk = _mm_set_epi32(0, 0, 0xffff, 0xffffffff);				break;
+    case 7:				msk = _mm_set_epi32(0, 0, 0xffffff, 0xffffffff);				break;
+    case 8:				msk = _mm_set_epi32(0, 0, 0xffffffff, 0xffffffff);				break;
+    default:case 9:		msk = _mm_set_epi32(0, 0xff, 0xffffffff, 0xffffffff);				break;
+    }
+
+    if (y != 2) {	// >
+        temp = _mm_loadu_si128((__m128i*)(dppp + start));
+        temp = _mm_min_epu8(temp, _mm_set1_epi8(127));	//本当はepu8で比較したいが、命令がないので、128以上は127に丸める？
+        temp = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+        upper2 = (_mm_testz_si128(temp, msk)) ? 0 : 1;	//==0で1なので、反転 sete/setneという命令で反転できるから↓の小細工不要？
+        //temp = _mm_subs_epu8( temp, _mm_set1_epi8(19) );	//temp[]-19  負になる場合は0 ==19以下は0
+        //temp = _mm_cmpeq_epi8( temp, _mm_setzero_si128() );	//temp[] <=19 ? ff : 0    0になる==19以下
+        //upper2= _mm_testz_si128(temp,msk);
+    }
+    if (upper) {
+        temp = _mm_loadu_si128((__m128i*)(dpn + start));
+        temp = _mm_min_epu8(temp, _mm_set1_epi8(127));
+        temp = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+        lower = (_mm_testz_si128(temp, msk)) ? 0 : 1;
+    }
+    else {	//lower==1
+        temp = _mm_loadu_si128((__m128i*)(dpp + start));
+        temp = _mm_min_epu8(temp, _mm_set1_epi8(127));
+        temp = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+        upper = (_mm_testz_si128(temp, msk)) ? 0 : 1;
+    }
+    if (y != Height - 4) {	// <
+        temp = _mm_loadu_si128((__m128i*)(dpnn + start));
+        temp = _mm_min_epu8(temp, _mm_set1_epi8(127));
+        temp = _mm_cmpgt_epi8(temp, _mm_set1_epi8(19));
+        lower2 = (_mm_testz_si128(temp, msk)) ? 0 : 1;
+    }
+
+    //p13 :
+    if (upper == 0) {
+        if (lower == 0 || lower2 == 0) {	// p17:
+            if (count > 4) {
+                dstp[x] = 5;	//+=4
+            }
+        }
+        else {
+            dstp[x] = 3;	// p18	+=2
+        }
+    }
+    else {	//upper=1
+        if (lower != 0 || upper2 != 0) {
+            dstp[x] = 3;		//+=2
+        }
+        else {
+            if (count > 4) {
+                dstp[x] = 5;	//+=4
+            }
+        }
+    }
+}
+
 // Common TDeint and TFM version
 template<typename pixel_t, int bits_per_pixel>
+#if defined(GCC) || defined(CLANG)
+__attribute__((__target__("sse4.2")))
+#endif
 void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height)
 {
   tpitch /= sizeof(pixel_t);
@@ -837,8 +1048,11 @@ template void check_combing_c_Metric1<uint16_t, false, int64_t>(const uint16_t* 
 
 
 
+#if defined(GCC) || defined(CLANG)
+__attribute__((__target__("sse4.1")))
+#endif 
 template<bool with_luma_mask>
-static void check_combing_SSE2_generic(const uint8_t *srcp, uint8_t *dstp, int width,
+static void check_combing_SSE4_generic(const uint8_t *srcp, uint8_t *dstp, int width,
   int height, int src_pitch, int dst_pitch, int cthresh)
 {
   unsigned int cthresht = std::min(std::max(255 - cthresh - 1, 0), 255);
@@ -865,16 +1079,17 @@ static void check_combing_SSE2_generic(const uint8_t *srcp, uint8_t *dstp, int w
       }
       auto res_part1 = xmm2_cmp;
       bool cmpres_is_allzero;
-#ifdef _M_X64
-      cmpres_is_allzero = (_mm_cvtsi128_si64(xmm2_cmp) | _mm_cvtsi128_si64(_mm_srli_si128(xmm2_cmp, 8))) == 0; // _si64: only at x64 platform
-#else
-      cmpres_is_allzero = (_mm_cvtsi128_si32(xmm2_cmp) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 4)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 8)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 12))
-        ) == 0;
-#endif
-        if (!cmpres_is_allzero) {
+//#ifdef _M_X64
+//      cmpres_is_allzero = (_mm_cvtsi128_si64(xmm2_cmp) | _mm_cvtsi128_si64(_mm_srli_si128(xmm2_cmp, 8))) == 0; // _si64: only at x64 platform
+//#else
+//      cmpres_is_allzero = (_mm_cvtsi128_si32(xmm2_cmp) |
+//          _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 4)) |
+//          _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 8)) |
+//          _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 12))
+//          ) == 0;
+//#endif
+      cmpres_is_allzero = _mm_testz_si128(xmm2_cmp, xmm2_cmp);	//needs sse4.1(Penryn or after)
+      if (!cmpres_is_allzero) {
           // output2
           auto zero = _mm_setzero_si128();
           // compute 3*(p+n)
@@ -930,16 +1145,16 @@ static void check_combing_SSE2_generic(const uint8_t *srcp, uint8_t *dstp, int w
 }
 
 
-void check_combing_SSE2(const uint8_t *srcp, uint8_t *dstp, int width, int height, int src_pitch, int dst_pitch, int cthresh)
+void check_combing_SSE4(const uint8_t *srcp, uint8_t *dstp, int width, int height, int src_pitch, int dst_pitch, int cthresh)
 {
   // no luma masking
-  check_combing_SSE2_generic<false>(srcp, dstp, width, height, src_pitch, dst_pitch, cthresh);
+  check_combing_SSE4_generic<false>(srcp, dstp, width, height, src_pitch, dst_pitch, cthresh);
 }
 
-void check_combing_YUY2LumaOnly_SSE2(const uint8_t *srcp, uint8_t *dstp, int width, int height, int src_pitch, int dst_pitch, int cthresh)
+void check_combing_YUY2LumaOnly_SSE4(const uint8_t *srcp, uint8_t *dstp, int width, int height, int src_pitch, int dst_pitch, int cthresh)
 {
   // with luma masking
-  check_combing_SSE2_generic<true>(srcp, dstp, width, height, src_pitch, dst_pitch, cthresh);
+  check_combing_SSE4_generic<true>(srcp, dstp, width, height, src_pitch, dst_pitch, cthresh);
 }
 
 
@@ -981,15 +1196,7 @@ void check_combing_uint16_SSE4(const uint16_t* srcp, uint8_t* dstp, int width, i
 
       auto res_part1 = xmm2_cmp;
       bool cmpres_is_allzero;
-#ifdef _M_X64
-      cmpres_is_allzero = (_mm_cvtsi128_si64(xmm2_cmp) | _mm_cvtsi128_si64(_mm_srli_si128(xmm2_cmp, 8))) == 0; // _si64: only at x64 platform
-#else
-      cmpres_is_allzero = (_mm_cvtsi128_si32(xmm2_cmp) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 4)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 8)) |
-        _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 12))
-        ) == 0;
-#endif
+      cmpres_is_allzero = _mm_testz_si128(xmm2_cmp, xmm2_cmp);	//needs sse4.1(Penryn or after)
       if (!cmpres_is_allzero) {
         // output2
         auto zero = _mm_setzero_si128();

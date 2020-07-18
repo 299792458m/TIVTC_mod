@@ -54,10 +54,10 @@ void check_combing_c(const pixel_t* srcp, uint8_t* dstp, int width, int height, 
 template<typename pixel_t, bool YUY2_LumaOnly, typename safeint_t>
 void check_combing_c_Metric1(const pixel_t* srcp, uint8_t* dstp, int width, int height, int src_pitch, int dst_pitch, safeint_t cthreshsq);
 
-void check_combing_SSE2(const uint8_t *srcp, uint8_t *dstp,
+void check_combing_SSE4(const uint8_t *srcp, uint8_t *dstp,
   int width, int height, int src_pitch, int dst_pitch, int cthresh);
 
-void check_combing_YUY2LumaOnly_SSE2(const uint8_t *srcp, uint8_t *dstp,
+void check_combing_YUY2LumaOnly_SSE4(const uint8_t *srcp, uint8_t *dstp,
   int width, int height, int src_pitch, int dst_pitch, int cthresh);
 
 #if defined(GCC) || defined(CLANG)
@@ -74,6 +74,10 @@ void check_combing_SSE2_Luma_Metric1(const uint8_t *srcp, uint8_t *dstp,
 template<typename pixel_t>
 void buildABSDiffMask_SSE2(const uint8_t *prvp, const uint8_t *nxtp,
   uint8_t *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height);
+
+template<typename pixel_t>
+void buildABSDiffMask_AVX2(const uint8_t* prvp, const uint8_t* nxtp,
+	uint8_t* dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height);
 
 template<typename pixel_t, bool YUY2_LumaOnly>
 void buildABSDiffMask_c(const uint8_t* prvp, const uint8_t* nxtp,

@@ -53,6 +53,7 @@ bool TFM::checkCombedYUY2(PVideoFrame &src, int n, IScriptEnvironment *env, int 
   }
 
   const bool use_sse2 = (cpuFlags & CPUF_SSE2) ? true : false;
+  const bool use_sse4 = (cpuFlags & CPUF_SSE4) ? true : false;
 
   const uint8_t *srcp = src->GetReadPtr();
   const int src_pitch = src->GetPitch();
@@ -110,11 +111,11 @@ bool TFM::checkCombedYUY2(PVideoFrame &src, int n, IScriptEnvironment *env, int 
     srcpn += src_pitch;
     srcpnn += src_pitch;
     cmkw += cmk_pitch;
-    if (use_sse2)
+    if (use_sse4)
     {
       if (chroma)
       {
-        check_combing_SSE2(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
+        check_combing_SSE4(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
         srcppp += src_pitch * (Height - 4);
         srcpp += src_pitch * (Height - 4);
         srcp += src_pitch * (Height - 4);
@@ -124,7 +125,7 @@ bool TFM::checkCombedYUY2(PVideoFrame &src, int n, IScriptEnvironment *env, int 
       }
       else
       {
-        check_combing_YUY2LumaOnly_SSE2(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
+        check_combing_YUY2LumaOnly_SSE4(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
         srcppp += src_pitch * (Height - 4);
         srcpp += src_pitch * (Height - 4);
         srcp += src_pitch * (Height - 4);
