@@ -1300,56 +1300,75 @@ int TFM::compareFieldsSlow_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame 
 #ifdef USE_C_NO_ASM
     const int Const23 = 23 << (bits_per_pixel - 8);
     const int Const42 = 42 << (bits_per_pixel - 8);
+    auto readmsk = (incl == 1) ? _mm_set_epi8(-1, 7, -1, 6, -1, 5, -1, 4, -1, 3, -1, 2, -1, 1, -1, 0)
+        : _mm_set_epi8(-1, 14, -1, 12, -1, 10, -1, 8, -1, 6, -1, 4, -1, 2, -1, 0);
 
     // TFM 1144
     // almost the same as in compareFields and buildDiffMapPlane2
     for (int y = 2; y < Height - 2; y += 2) {
-      if ((y < y0a) || noBandExclusion || (y > y1a)) // exclusion area check
+      if (noBandExclusion || (y < y0a) || (y > y1a)) // exclusion area check
       {
-        for (int x = startx; x < stopx; x += incl)
-        {
-          // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
-          int eax = (mapp[x] << 3) + mapn[x];
-          if ((eax & 0xFF) == 0)
-            continue;
+        int x= startx;
+        if constexpr (sizeof(pixel_t) == 1) {
+            if (cpuFlags & CPUF_SSE4_1) {
+                for (; x < stopx - 7; x += incl * 8)	//incl=1 or 2
+                {
+                    __m128i eax = compareFieldsSlowCal0_SSSE3(x, readmsk, mapp, mapn);
+                    //if ((eax & 0xFF) == 0){continue;}
+                    if (_mm_testz_si128(eax, _mm_set1_epi16(255))) { continue; }
 
-          int a_curr = curpf[x] + (curf[x] << 2) + curnf[x];
-          int a_prev = 3 * (prvpf[x] + prvnf[x]);
-          int diff_p_c = abs(a_prev - a_curr);
-          if (diff_p_c > Const23) {
-            if((eax & 9) != 0) // diff from previous similar asm block: condition
-              accumPc += diff_p_c;
-            if (diff_p_c > Const42) {
-              if ((eax & 18) != 0) // diff: &18 instead of &10
-                accumPm += diff_p_c;
-              if ((eax & 36) != 0) // diff: new condition and accumulator
-                accumPml += diff_p_c;
+
+                    compareFieldsSlowCal1_SSSE3(x, eax, readmsk,
+                        static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                        static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                        static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                        accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
+
+                }
             }
-          }
-          int a_next = 3 * (nxtpf[x] + nxtnf[x]);
-          int diff_n_c = abs(a_next - a_curr);
-          if (diff_n_c > Const23) {
-            if ((eax & 9) != 0) // diff from previous similar asm block: condition
-              accumNc += diff_n_c;
-            if (diff_n_c > Const42) {
-              if ((eax & 18) != 0) // diff: &18 instead of &10
-                accumNm += diff_n_c;
-              if ((eax & 36) != 0) // diff: &18 instead of &10
-                accumNml += diff_n_c;
+        }
+
+        for (; x < stopx; x += incl)
+        {
+            int eax, a_curr, a_prev, a_next, diff_p_c, diff_n_c;
+
+            eax = (mapp[x] << 3) + mapn[x]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+            if ((eax & 0xFF) == 0) { continue; }
+
+            a_curr = curpf[x] + (curf[x] << 2) + curnf[x];
+            a_prev = 3 * (prvpf[x] + prvnf[x]);
+            a_next = 3 * (nxtpf[x] + nxtnf[x]);
+            diff_p_c = abs(a_prev - a_curr);
+            diff_n_c = abs(a_next - a_curr);
+
+            if ((eax & 9) != 0) {
+                if (diff_p_c > Const23) { accumPc += diff_p_c; }
+                if (diff_n_c > Const23) { accumNc += diff_n_c; }
             }
-          }
+            if ((eax & 18) != 0) {
+                if (diff_p_c > Const42) { accumPm += diff_p_c; }
+                if (diff_n_c > Const42) { accumNm += diff_n_c; }
+            }
+            if ((eax & 36) != 0) {
+                if (diff_p_c > Const42) { accumPml += diff_p_c; }
+                if (diff_n_c > Const42) { accumNml += diff_n_c; }
+            }
+
         }
       } // if
 
       mapp += map_pitch;
-      prvpf += prvf_pitch;
-      curpf += curf_pitch;
-      prvnf += prvf_pitch;
-      curf += curf_pitch;
-      nxtpf += nxtf_pitch;
-      curnf += curf_pitch;
-      nxtnf += nxtf_pitch;
       mapn += map_pitch;
+
+      prvpf += prvf_pitch;
+      prvnf += prvf_pitch;
+
+      curpf += curf_pitch;
+      curf += curf_pitch;
+      curnf += curf_pitch;
+
+      nxtpf += nxtf_pitch;
+      nxtnf += nxtf_pitch;
     }
 
 #else
@@ -1815,79 +1834,108 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
       // differences are after eax&56 block, see later
 
       for (int y = 2; y < Height - 2; y += 2) {
-        if ((y < y0a) || noBandExclusion || (y > y1a))
+        if (noBandExclusion || (y < y0a) || (y > y1a))
         {
-          for (int x = startx; x < stopx; x += incl)
-          {
-              int eax, a_curr, a_prev, a_next, diff_p_c, diff_n_c;
+            int x = startx;
+            if constexpr (sizeof(pixel_t) == 1) {
+                if (cpuFlags & CPUF_SSE4_1) {
+                    for (; x < stopx - 7; x += incl * 8)	//incl=1 or 2
+                    {
+                        __m128i eax = compareFieldsSlowCal0_SSSE3(x, readmsk, mapp, mapn);
+                        //if ((eax & 0xFF) == 0){continue;}
+                        if (_mm_testz_si128(eax, _mm_set1_epi16(255))) { continue; }
 
-              eax = (mapp[x] << 3) + mapn[x]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
-              if ((eax & 0xFF) == 0) { continue; }
 
-              a_curr = curpf[x] + (curf[x] << 2) + curnf[x];
-              a_prev = 3 * (prvpf[x] + prvnf[x]);
-              a_next = 3 * (nxtpf[x] + nxtnf[x]);
-              diff_p_c = abs(a_prev - a_curr);
-              diff_n_c = abs(a_next - a_curr);
+                        compareFieldsSlowCal1_SSSE3(x, eax, readmsk,
+                            static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                            static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
 
-              if ((eax & 9) != 0) {	//00001001n
-                  if (diff_p_c > Const23) { accumPc += diff_p_c; }	//23=00010111n 42=00101010n
-                  if (diff_n_c > Const23) { accumNc += diff_n_c; }
-              }
-              if ((eax & 18) != 0) {	//00010010n
-                  if (diff_p_c > Const42) { accumPm += diff_p_c; }
-                  if (diff_n_c > Const42) { accumNm += diff_n_c; }
-              }
-              if ((eax & 36) != 0) {	//00100100n
-                  if (diff_p_c > Const42) { accumPml += diff_p_c; }
-                  if (diff_n_c > Const42) { accumNml += diff_n_c; }
-              }
+                        int sft = 0;//field==0 ? 3 : 0;
+                        compareFieldsSlowCal2_SSE41(x, eax, readmsk, sft,
+                            static_cast<const uint8_t*>(prvppf), static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf),
+                            static_cast<const uint8_t*>(nxtppf), static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
 
-              // difference from TFM 1436
-              // prvpf  -> prvnf
-              // prvppf -> prvpf
-              // prvnf  -> prvnnf
-              // curpf  -> curf
-              // curf   -> curnf
-              // nxtpf  -> nxtnf
-              // nxtppf -> nxtpf
-              // nxtnf  -> nxtnnf
-              // mask 8/16/32 -> 1/2/4
-              if ((eax & 7) != 0) {
-                  a_curr = 3 * (curf[x] + curnf[x]);
-                  a_prev = prvpf[x] + (prvnf[x] << 2) + prvnnf[x];
-                  a_next = nxtpf[x] + (nxtnf[x] << 2) + nxtnnf[x]; // really! not 3*
+                    }
+                }
+            }
+            for (; x < stopx; x += incl)
+            {
+                int eax, a_curr, a_prev, a_next, diff_p_c, diff_n_c;
 
-                  diff_p_c = abs(a_prev - a_curr);
-                  diff_n_c = abs(a_next - a_curr);
+                eax = (mapp[x] << 3) + mapn[x]; // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+                if ((eax & 0xFF) == 0) { continue; }
 
-                  if ((eax & 1) != 0) {
-                      if (diff_p_c > Const23) { accumPc += diff_p_c; }
-                      if (diff_n_c > Const23) { accumNc += diff_n_c; }
-                  }
-                  if ((eax & 2) != 0) {
-                      if (diff_p_c > Const42) { accumPm += diff_p_c; }
-                      if (diff_n_c > Const42) { accumNm += diff_n_c; }
-                  }
-                  if ((eax & 4) != 0) {
-                      if (diff_p_c > Const42) { accumPml += diff_p_c; }
-                      if (diff_n_c > Const42) { accumNml += diff_n_c; }
-                  }
-              }
-          }
+                a_curr = curpf[x] + (curf[x] << 2) + curnf[x];
+                a_prev = 3 * (prvpf[x] + prvnf[x]);
+                a_next = 3 * (nxtpf[x] + nxtnf[x]);
+                diff_p_c = abs(a_prev - a_curr);
+                diff_n_c = abs(a_next - a_curr);
+
+                if ((eax & 9) != 0) {	//00001001n
+                    if (diff_p_c > Const23) { accumPc += diff_p_c; }	//23=00010111n 42=00101010n
+                    if (diff_n_c > Const23) { accumNc += diff_n_c; }
+                }
+                if ((eax & 18) != 0) {	//00010010n
+                    if (diff_p_c > Const42) { accumPm += diff_p_c; }
+                    if (diff_n_c > Const42) { accumNm += diff_n_c; }
+                }
+                if ((eax & 36) != 0) {	//00100100n
+                    if (diff_p_c > Const42) { accumPml += diff_p_c; }
+                    if (diff_n_c > Const42) { accumNml += diff_n_c; }
+                }
+
+                // difference from TFM 1436
+                // prvpf  -> prvnf
+                // prvppf -> prvpf
+                // prvnf  -> prvnnf
+                // curpf  -> curf
+                // curf   -> curnf
+                // nxtpf  -> nxtnf
+                // nxtppf -> nxtpf
+                // nxtnf  -> nxtnnf
+                // mask 8/16/32 -> 1/2/4
+                if ((eax & 7) != 0) {
+                    a_curr = 3 * (curf[x] + curnf[x]);
+                    a_prev = prvpf[x] + (prvnf[x] << 2) + prvnnf[x];
+                    a_next = nxtpf[x] + (nxtnf[x] << 2) + nxtnnf[x]; // really! not 3*
+
+                    diff_p_c = abs(a_prev - a_curr);
+                    diff_n_c = abs(a_next - a_curr);
+
+                    if ((eax & 1) != 0) {
+                        if (diff_p_c > Const23) { accumPc += diff_p_c; }
+                        if (diff_n_c > Const23) { accumNc += diff_n_c; }
+                    }
+                    if ((eax & 2) != 0) {
+                        if (diff_p_c > Const42) { accumPm += diff_p_c; }
+                        if (diff_n_c > Const42) { accumNm += diff_n_c; }
+                    }
+                    if ((eax & 4) != 0) {
+                        if (diff_p_c > Const42) { accumPml += diff_p_c; }
+                        if (diff_n_c > Const42) { accumNml += diff_n_c; }
+                    }
+                }
+            }
         } // if
 
         mapp += map_pitch;
-        prvpf += prvf_pitch;
+        mapn += map_pitch;
+
         curpf += curf_pitch;
-        prvnf += prvf_pitch;
         curf += curf_pitch;
-        prvnnf += prvf_pitch; // 1.0.12
-        nxtpf += nxtf_pitch;
         curnf += curf_pitch;
+
+        prvpf += prvf_pitch;
+        prvnf += prvf_pitch;
+        prvnnf += prvf_pitch; // 1.0.12
+
+        nxtpf += nxtf_pitch;
         nxtnf += nxtf_pitch;
         nxtnnf += nxtf_pitch;
-        mapn += map_pitch;
 
         // not used prvppf += prvf_pitch;
         // not used nxtppf += nxtf_pitch;
