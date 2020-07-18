@@ -206,6 +206,7 @@ void ShowCombedTIVTC::fillCombedYUY2(PVideoFrame &src, int &MICount,
   int &b_over, int &c_over, IScriptEnvironment *env)
 {
   bool use_sse2 = (cpuFlags & CPUF_SSE2) ? true : false;
+  bool use_sse4 = (cpuFlags & CPUF_SSE4) ? true : false;
 
   const uint8_t *srcp = src->GetReadPtr();
   const int src_pitch = src->GetPitch();
@@ -263,12 +264,12 @@ void ShowCombedTIVTC::fillCombedYUY2(PVideoFrame &src, int &MICount,
     srcpn += src_pitch;
     srcpnn += src_pitch;
     cmkw += cmk_pitch;
-    if (use_sse2)
+    if (use_sse4)
     {
       if (chroma) // YUY2 luma-chroma in one pass
-        check_combing_SSE2(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
+        check_combing_SSE4(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
       else
-        check_combing_YUY2LumaOnly_SSE2(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
+        check_combing_YUY2LumaOnly_SSE4(srcp, cmkw, Width, Height - 4, src_pitch, cmk_pitch, cthresh);
       srcppp += src_pitch * (Height - 4);
       srcpp += src_pitch * (Height - 4);
       srcp += src_pitch * (Height - 4);

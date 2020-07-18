@@ -479,6 +479,7 @@ void TDeinterlace::denoiseYUY2(PVideoFrame &mask)
 bool TDeinterlace::checkCombedYUY2(PVideoFrame &src, int &MIC, bool chroma, int cthresh, IScriptEnvironment *env)
 {
   bool use_sse2 = (cpuFlags & CPUF_SSE2) ? true : false;
+  bool use_sse4 = (cpuFlags & CPUF_SSE4) ? true : false;
 
   const uint8_t *srcp = src->GetReadPtr();
   const int src_pitch = src->GetPitch();
@@ -539,15 +540,15 @@ bool TDeinterlace::checkCombedYUY2(PVideoFrame &src, int &MIC, bool chroma, int 
     cmkw += cmk_pitch;
     // middle Height - 4
     const int lines_to_process = Height - 4;
-    if (use_sse2)
+    if (use_sse4)
     {
       if (chroma)
       {
-        check_combing_SSE2(srcp, cmkw, Width, lines_to_process, src_pitch, cmk_pitch, cthresh);
+        check_combing_SSE4(srcp, cmkw, Width, lines_to_process, src_pitch, cmk_pitch, cthresh);
       }
       else
       {
-        check_combing_YUY2LumaOnly_SSE2(srcp, cmkw, Width, lines_to_process, src_pitch, cmk_pitch, cthresh);
+        check_combing_YUY2LumaOnly_SSE4(srcp, cmkw, Width, lines_to_process, src_pitch, cmk_pitch, cthresh);
       }
     }
     else

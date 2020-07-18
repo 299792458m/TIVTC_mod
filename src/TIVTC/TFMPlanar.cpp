@@ -132,8 +132,8 @@ void checkCombedPlanarAnalyze_core(const VideoInfo& vi, int cthresh, bool chroma
       cmkp += cmk_pitch;
       // middle Height - 4
       const int lines_to_process = Height - 4;
-      if (use_sse2 && sizeof(pixel_t) == 1)
-        check_combing_SSE2((const uint8_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
+      if (use_sse4 && sizeof(pixel_t) == 1)
+        check_combing_SSE4((const uint8_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
       else if (use_sse4 && sizeof(pixel_t) == 2)
         check_combing_uint16_SSE4((const uint16_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
       else
