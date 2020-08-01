@@ -1054,7 +1054,7 @@ void VerticalBlurSSE2_R(const uint8_t *srcp, uint8_t *dstp,
 // true SAD false SSD
 template<bool SAD>
 static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr2,
-  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, const VideoInfo& vi)
+  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi)
 {
   int temp1, temp2, y, x, u, difft, box1, box2;
   int widtha, heighta, heights = height, widths = width;
@@ -1092,10 +1092,23 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
         SAD_fn = calcSSD_SSE2_8xN<16>;
       else if (xsubsampling == 1 && ysubsampling == 1) // YV12
         SAD_fn = calcSSD_SSE2_8xN<8>;
-      else if (xsubsampling == 1 && ysubsampling == 0) // YV411
+      else if (xsubsampling == 2 && ysubsampling == 0) // YV411
         SAD_fn = calcSSD_SSE2_4xN<16>;
     }
     // other formats are forbidden and were pre-checked
+
+    int yshift, yhalf, xshift, xhalf;
+    int yshifta, yhalfa, xshifta, xhalfa;
+
+    yshifta = yshiftS - ysubsampling; // yshiftS  or yshiftS - 1
+    yhalfa = yhalfS >> ysubsampling; // yhalfS  or yhalfS >> 1;
+    xshifta = xshiftS - xsubsampling; //  xshiftS or  xshiftS - 1;
+    xhalfa = xhalfS >> xsubsampling; // xhalfS  or xhalfS >> 1;
+    yshift = yshiftS - 4;
+    yhalf = yhalfS >> 4; // div 16
+    xshift = xshiftS - 4;
+    xhalf = xhalfS >> 4;
+
 
     // number of whole blocks
     for (y = 0; y < height; ++y)
@@ -1107,19 +1120,19 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
       // FIXME: why >>1 and +1>>1 here? 
       // Fact 1: y here goes in block-counter mode
       // Fact 2: Because we do 32x32 but with 16x16 luma (and divided chroma) blocks?
-      temp1 = (y >> 1) * xblocks4;
-      temp2 = ((y + 1) >> 1) * xblocks4;
+      temp1 = (y >> yshift) * xblocks4;
+      temp2 = ((y + yhalf) >> yshift) * xblocks4;
       for (x = 0; x < width; ++x) // width is the number of blocks
       {
         SAD_fn(ptr1 + (x << w_to_shift), ptr2 + (x << w_to_shift), pitch1, pitch2, difft);
-        box1 = (x >> 1) << 2;
-        box2 = ((x + 1) >> 1) << 2;
+        box1 = (x >> xshift) << 2;
+        box2 = ((x + xhalf) >> xshift) << 2;
         diff[temp1 + box1 + 0] += difft;
         diff[temp1 + box2 + 1] += difft;
         diff[temp2 + box1 + 2] += difft;
         diff[temp2 + box2 + 3] += difft;
       }
-      // rest non-simd
+      // rest non-simd xyも実際の幅(シフトする前)に
       for (x = widtha; x < widths; ++x)
       {
         ptr1T = ptr1;
@@ -1133,8 +1146,8 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
           ptr1T += pitch1;
           ptr2T += pitch2;
         }
-        box1 = (x >> (w_to_shift + 1)) << 2;
-        box2 = ((x + (1 << w_to_shift)) >> (w_to_shift + 1)) << 2;
+        box1 = (x >> xshifta) << 2;
+        box2 = ((x + xhalfa) >> xshifta) << 2;
         diff[temp1 + box1 + 0] += difft;
         diff[temp1 + box2 + 1] += difft;
         diff[temp2 + box1 + 2] += difft;
@@ -1146,8 +1159,8 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
     }
     for (y = heighta; y < heights; ++y)
     {
-      temp1 = (y >> (w_to_shift + 1)) * xblocks4; // y >> 5 or 4
-      temp2 = ((y + (1 << w_to_shift)) >> (w_to_shift + 1)) * xblocks4;
+      temp1 = (y >> yshifta) * xblocks4; // y >> 5 or 4
+      temp2 = ((y + yhalfa) >> yshifta) * xblocks4;
       for (x = 0; x < widths; ++x)
       {
         if constexpr (SAD)
@@ -1156,8 +1169,8 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
           difft = ptr1[x] - ptr2[x];
           difft *= difft;
         }
-        box1 = (x >> (w_to_shift + 1)) << 2;
-        box2 = ((x + (1 << w_to_shift)) >> (w_to_shift + 1)) << 2;
+        box1 = (x >> xshifta) << 2;
+        box2 = ((x + xhalfa) >> xshifta) << 2;
         diff[temp1 + box1 + 0] += difft;
         diff[temp1 + box2 + 1] += difft;
         diff[temp2 + box1 + 2] += difft;
@@ -1311,15 +1324,15 @@ static void calcDiff_SADorSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr
 }
 
 void calcDiffSAD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr2,
-  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, const VideoInfo& vi)
+  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi)
 {
-  calcDiff_SADorSSD_32x32_SSE2<true>(ptr1, ptr2, pitch1, pitch2, width, height, plane, xblocks4, diff, chroma, vi);
+  calcDiff_SADorSSD_32x32_SSE2<true>(ptr1, ptr2, pitch1, pitch2, width, height, plane, xblocks4, diff, chroma, xshiftS, yshiftS, xhalfS, yhalfS, vi);
 }
 
 void calcDiffSSD_32x32_SSE2(const uint8_t* ptr1, const uint8_t* ptr2,
-  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, const VideoInfo& vi)
+  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi)
 {
-  calcDiff_SADorSSD_32x32_SSE2<false>(ptr1, ptr2, pitch1, pitch2, width, height, plane, xblocks4, diff, chroma, vi);
+  calcDiff_SADorSSD_32x32_SSE2<false>(ptr1, ptr2, pitch1, pitch2, width, height, plane, xblocks4, diff, chroma, xshiftS, yshiftS, xhalfS, yhalfS, vi);
 }
 
 

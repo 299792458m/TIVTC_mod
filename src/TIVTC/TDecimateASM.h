@@ -73,10 +73,10 @@ void calcSAD_SSE2_16xN(const uint8_t *ptr1, const uint8_t *ptr2, int pitch1, int
 
 //-- helpers
 void calcDiffSAD_32x32_SSE2(const uint8_t *ptr1, const uint8_t *ptr2,
-  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t *diff, bool chroma, const VideoInfo& vi);
+	int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi);
 
 void calcDiffSSD_32x32_SSE2(const uint8_t *ptr1, const uint8_t *ptr2,
-  int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t *diff, bool chroma, const VideoInfo& vi);
+	int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t* diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi);
 
 void calcDiffSSD_Generic_SSE2(const uint8_t *ptr1, const uint8_t *ptr2,
   int pitch1, int pitch2, int width, int height, int plane, int xblocks4, uint64_t *diff, bool chroma, int xshiftS, int yshiftS, int xhalfS, int yhalfS, const VideoInfo& vi);
