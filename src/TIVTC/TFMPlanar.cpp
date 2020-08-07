@@ -90,10 +90,10 @@ void checkCombedPlanarAnalyze_core(const VideoInfo& vi, int cthresh, bool chroma
     const int cmk_pitch = cmask->GetPitch(b);
 
     if (scaled_cthresh < 0) {
-      memset(cmkp, 255, Height * cmk_pitch); // mask. Always 8 bits 
+      mymemset(cmkp, 255, Height * cmk_pitch); // mask. Always 8 bits 
       continue;
     }
-    memset(cmkp, 0, Height * cmk_pitch);
+    mymemset(cmkp, 0, Height * cmk_pitch);
 
     if (metric == 0)
     {
@@ -284,7 +284,7 @@ bool TFM::checkCombedPlanar_core(PVideoFrame &src, int n, IScriptEnvironment *en
   xblocksi = xblocks4;
   const int yblocks = ((Height + yhalf) >> yshift) + 1;
   const int arraysize = (xblocks*yblocks) << 2;
-  memset(cArray, 0, arraysize * sizeof(int));
+  mymemset(cArray, 0, arraysize * sizeof(int));
 
   int Heighta = (Height >> (yshift - 1)) << (yshift - 1);
   if (Heighta == Height) Heighta = Height - yhalf;

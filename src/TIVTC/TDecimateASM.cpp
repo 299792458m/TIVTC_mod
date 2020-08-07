@@ -286,35 +286,43 @@ void calcSAD_SSE2_16xN(const uint8_t* ptr1, const uint8_t* ptr2,
   __m128i tmpsum = _mm_setzero_si128();
   // unrolled loop
   for (int i = 0; i < blkSizeY / 8; i++) {
-    __m128i xmm0, xmm1;
+    __m128i xmm0, xmm1,xmm2,xmm3;
     xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp1 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp2 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp3 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp4 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
@@ -323,8 +331,6 @@ void calcSAD_SSE2_16xN(const uint8_t* ptr1, const uint8_t* ptr2,
     xmm1 = _mm_add_epi32(tmp3, tmp4);
     tmpsum = _mm_add_epi32(tmpsum, xmm0);
     tmpsum = _mm_add_epi32(tmpsum, xmm1);
-    //ptr1 += pitch1 * 2;
-    //ptr2 += pitch2 * 2;
   }
   __m128i sum = _mm_add_epi32(tmpsum, _mm_srli_si128(tmpsum, 8)); // add lo, hi
   sad = _mm_cvtsi128_si32(sum);
@@ -406,35 +412,43 @@ void calcSAD_SSE2_8xN(const uint8_t *ptr1, const uint8_t *ptr2,
   // blkSizeY should be multiple of 8
   // unrolled loop
   for (int i = 0; i < blkSizeY / 8; i++) {
-    __m128i xmm0, xmm1;
+    __m128i xmm0, xmm1,xmm2,xmm3;
     xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp1 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp2 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp3 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2;
     ptr2 += pitch2 * 2;
 
     xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
+    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
     xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm0 = _mm_sad_epu8(xmm0, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2)));
-    xmm1 = _mm_sad_epu8(xmm1, _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2)));
+    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
+    xmm0 = _mm_sad_epu8(xmm0, xmm2);
+    xmm1 = _mm_sad_epu8(xmm1, xmm3);
     __m128i tmp4 = _mm_add_epi32(xmm0, xmm1);
     ptr1 += pitch1 * 2; // if last, no need more, hope compiler solves it
     ptr2 += pitch2 * 2;

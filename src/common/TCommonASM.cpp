@@ -20,8 +20,7 @@
 */
 
 #include "TCommonASM.h"
-#include "emmintrin.h"
-#include "smmintrin.h" // SSE4
+#include <immintrin.h>
 #include <algorithm>
 #include <intrin.h>
 
@@ -179,6 +178,9 @@ void buildABSDiffMask_SSE2(const uint8_t* prvp, const uint8_t* nxtp,
 }
 
 template<typename pixel_t>
+#if defined(GCC) || defined(CLANG)
+__attribute__((__target__("avx2")))
+#endif 
 void buildABSDiffMask_AVX2(const uint8_t* prvp, const uint8_t* nxtp, uint8_t* dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int width, int height)
 {
     while (height--) {
@@ -257,11 +259,10 @@ void do_buildABSDiffMask(const uint8_t* prvp, const uint8_t* nxtp, uint8_t* tbuf
     const int rowsize = width * sizeof(pixel_t);
     const int rowsizemod8 = rowsize / 8 * 8;
     // SSE2 is not YUY2 chroma-ignore template, it's quicker if not skipping each YUY2 chroma
-    if ((cpuFlags & CPUF_AVX2) && !((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch | rowsizemod8) & 31))
-    {
+    if ((cpuFlags & CPUF_AVX2) && (width >= 32) &&!((intptr_t(prvp) | intptr_t(nxtp) | prv_pitch | nxt_pitch | tpitch | rowsizemod8) & 31))
         buildABSDiffMask_AVX2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
-    }
-    else buildABSDiffMask_SSE2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
+    else
+        buildABSDiffMask_SSE2<pixel_t>(prvp, nxtp, tbuffer, prv_pitch, nxt_pitch, tpitch, rowsizemod8, height);
 
     if(YUY2_LumaOnly)
       buildABSDiffMask_c<pixel_t, true>(
@@ -480,12 +481,12 @@ static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
     {
         auto temp = _mm_loadu_si128((__m128i*)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
         if (_mm_testz_si128(temp, _mm_set1_epi8(-4))) {	//sse4.1
-            do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
-                x += 16;
-                temp = _mm_loadu_si128((__m128i*)(dp + x));
-            } while ((_mm_testz_si128(temp, _mm_set1_epi8(-4))) && (x < Width));
-            x--;	//continue時に++されるから
-            return;
+            //do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
+            //    x += 16;
+            //    temp = _mm_loadu_si128((__m128i*)(dp + x));
+            //} while ((_mm_testz_si128(temp, _mm_set1_epi8(-4))) && (x < Width));
+            //x--;return;	//continue時に++されるから
+            x += 15;return; //連続スキップなしの時
         }
 
         temp = _mm_and_si128(temp, _mm_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
@@ -496,12 +497,12 @@ static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
         //この時点で <=3 ? 0 : 1
 
         //tzcntの場合(BMIが使える≒AVX2)
-        tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) bsfより高速
-        x += tmpi-1; return;		//continue後(forのpost)に+1されるので-1
+        //tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) bsfより高速
+        //x += tmpi-1; return;		//continue後(forのpost)に+1されるので-1
 
         //popcntで代替≒SSE42
-        //tmpi = _mm_popcnt_u32(~tmpi & (tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
-        //x += tmpi - 1; return;		//continue後(forのpost)に+1されるので-1
+        tmpi = _mm_popcnt_u32(~tmpi & (tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
+        x += tmpi - 1; return;		//continue後(forのpost)に+1されるので-1
         //x += tmpi;				//continueしない場合
 
         //bsfの場合 POPCNTも使えないならこうなる
@@ -1048,10 +1049,10 @@ template void check_combing_c_Metric1<uint16_t, false, int64_t>(const uint16_t* 
 
 
 
+template<bool with_luma_mask>
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("sse4.1")))
 #endif 
-template<bool with_luma_mask>
 static void check_combing_SSE4_generic(const uint8_t *srcp, uint8_t *dstp, int width,
   int height, int src_pitch, int dst_pitch, int cthresh)
 {
@@ -1059,6 +1060,7 @@ static void check_combing_SSE4_generic(const uint8_t *srcp, uint8_t *dstp, int w
   auto threshb = _mm_set1_epi8(cthresht);
   unsigned int cthresh6t = std::min(std::max(65535 - cthresh * 6 - 1, 0), 65535);
   auto thresh6w = _mm_set1_epi16(cthresh6t);
+  auto zero = _mm_setzero_si128();
 
   __m128i all_ff = _mm_set1_epi8(-1);
   while (height--) {
@@ -1073,12 +1075,12 @@ static void check_combing_SSE4_generic(const uint8_t *srcp, uint8_t *dstp, int w
       // max(min(p-s,n-s), min(s-n,s-p))
       auto xmm2_max = _mm_max_epu8(_mm_min_epu8(diff_prev_curr, diff_next_curr), _mm_min_epu8(diff_curr_next, diff_curr_prev));
       auto xmm2_cmp = _mm_cmpeq_epi8(_mm_adds_epu8(xmm2_max, threshb), all_ff);
-      if (with_luma_mask) { // YUY2 luma mask
+      if constexpr (with_luma_mask) { // YUY2 luma mask
         __m128i lumaMask = _mm_set1_epi16(0x00FF);
         xmm2_cmp = _mm_and_si128(xmm2_cmp, lumaMask);
       }
       auto res_part1 = xmm2_cmp;
-      bool cmpres_is_allzero;
+//      bool cmpres_is_allzero;
 //#ifdef _M_X64
 //      cmpres_is_allzero = (_mm_cvtsi128_si64(xmm2_cmp) | _mm_cvtsi128_si64(_mm_srli_si128(xmm2_cmp, 8))) == 0; // _si64: only at x64 platform
 //#else
@@ -1088,10 +1090,9 @@ static void check_combing_SSE4_generic(const uint8_t *srcp, uint8_t *dstp, int w
 //          _mm_cvtsi128_si32(_mm_srli_si128(xmm2_cmp, 12))
 //          ) == 0;
 //#endif
-      cmpres_is_allzero = _mm_testz_si128(xmm2_cmp, xmm2_cmp);	//needs sse4.1(Penryn or after)
-      if (!cmpres_is_allzero) {
+      //cmpres_is_allzero = _mm_testz_si128(xmm2_cmp, xmm2_cmp);	//needs sse4.1(Penryn or after)
+      if (!_mm_test_all_zeros(xmm2_cmp, xmm2_cmp)) {
           // output2
-          auto zero = _mm_setzero_si128();
           // compute 3*(p+n)
           auto next_lo = _mm_unpacklo_epi8(next, zero);
           auto prev_lo = _mm_unpacklo_epi8(prev, zero);
@@ -1582,3 +1583,39 @@ template void do_FillCombedPlanarUpdateCmaskByUV<411>(uint8_t* cmkp, uint8_t* cm
 template void do_FillCombedPlanarUpdateCmaskByUV<420>(uint8_t* cmkp, uint8_t* cmkpU, uint8_t* cmkpV, int Width, int Height, ptrdiff_t cmk_pitch, ptrdiff_t cmk_pitchUV);
 template void do_FillCombedPlanarUpdateCmaskByUV<422>(uint8_t* cmkp, uint8_t* cmkpU, uint8_t* cmkpV, int Width, int Height, ptrdiff_t cmk_pitch, ptrdiff_t cmk_pitchUV);
 template void do_FillCombedPlanarUpdateCmaskByUV<444>(uint8_t* cmkp, uint8_t* cmkpU, uint8_t* cmkpV, int Width, int Height, ptrdiff_t cmk_pitch, ptrdiff_t cmk_pitchUV);
+
+
+void mymemset(void* ptr, int v, size_t len)
+{
+    const size_t simdsize = 16;
+    size_t loff = ((intptr_t)ptr) % simdsize;
+    size_t lsimd = (len - loff) / simdsize;
+    size_t lrem = len - lsimd * simdsize - loff;
+    char* p = (char*)ptr;
+    char  c = (char)v;
+
+    if (loff) {
+        //memset(p, c, loff);
+        for (size_t i = 0; i < loff; i++) {p[i] = c;}
+        p += loff;
+    }
+
+    //AVX=simdsize = 32
+    //auto csimd = _mm256_set1_epi8(c); 
+    //for (size_t i = 0; i < lsimd; i++) {
+    //    _mm256_storeu_si256((__m256i*)p, csimd);
+    //    p += simdsize;
+    //}
+    //_mm256_zeroupper();
+
+    auto csimd = _mm_set1_epi8(c);
+    for (size_t i = 0; i < lsimd; i++) {
+        _mm_storeu_si128((__m128i*)p, csimd);
+        p += simdsize;
+    }
+
+    if (lrem) {
+        //memset(p, c, lrem);
+        for (size_t i = 0; i < lrem; i++) { p[i] = c; }   //こう書くとmemsetに置き換えられる
+    }
+}
