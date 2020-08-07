@@ -1180,7 +1180,7 @@ int TFM::compareFieldsSlow_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame 
 
     curf_pitch = src_pitch << 1;
 
-    memset(mapp, 0, Height * map_pitch);
+    mymemset(mapp, 0, Height * map_pitch);
 
     // exclusion area limits from parameters
     if (b == 0)
@@ -1598,7 +1598,7 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
 
     curf_pitch = src_pitch << 1;
 
-    memset(mapp, 0, Height * map_pitch);
+    mymemset(mapp, 0, Height * map_pitch);
 
     // exclusion area limits from parameters
     if (b == 0)
@@ -2930,12 +2930,12 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
         f = NULL;
         env->ThrowError("TFM:  malloc failure (ovrArray)!");
       }
-      memset(ovrArray, 255, vi.num_frames);
+      mymemset(ovrArray, 255, vi.num_frames);
       if (d2vfilmarray == NULL)
       {
         d2vfilmarray = (uint8_t *)malloc((vi.num_frames + 1) * sizeof(uint8_t));
         if (d2vfilmarray == NULL) env->ThrowError("TFM:  malloc failure (d2vfilmarray)!");
-        memset(d2vfilmarray, 0, (vi.num_frames + 1) * sizeof(uint8_t));
+        mymemset(d2vfilmarray, 0, (vi.num_frames + 1) * sizeof(uint8_t));
       }
       fieldt = fieldO;
       firstLine = 0;
@@ -3133,14 +3133,14 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
         countOvrS *= 4;
         setArray = (int *)malloc(countOvrS * sizeof(int));
         if (setArray == NULL) env->ThrowError("TFM:  malloc failure (setArray)!");
-        memset(setArray, 255, countOvrS * sizeof(int));
+        mymemset(setArray, 255, countOvrS * sizeof(int));
         setArraySize = countOvrS;
       }
       if (countOvrM > 0 && ovrArray == NULL)
       {
         ovrArray = (uint8_t *)malloc(vi.num_frames * sizeof(unsigned char));
         if (ovrArray == NULL) env->ThrowError("TFM:  malloc failure (ovrArray)!");
-        memset(ovrArray, 255, vi.num_frames);
+        mymemset(ovrArray, 255, vi.num_frames);
         if (ovrDefault != 0)
         {
           if (ovrDefault == 1) q = 0;
@@ -3572,7 +3572,7 @@ emptyovr:
       outArray = (uint8_t *)malloc(vi.num_frames * sizeof(unsigned char));
       if (outArray == NULL)
         env->ThrowError("TFM:  malloc failure (outArray, output)!");
-      memset(outArray, 0, vi.num_frames);
+      mymemset(outArray, 0, vi.num_frames);
       moutArray = (int *)malloc(vi.num_frames * sizeof(int));
       if (moutArray == NULL)
         env->ThrowError("TFM:  malloc failure (moutArray, output)!");
@@ -3600,7 +3600,7 @@ emptyovr:
         outArray = (uint8_t *)malloc(vi.num_frames * sizeof(unsigned char));
         if (outArray == NULL)
           env->ThrowError("TFM:  malloc failure (outArray, outputC)!");
-        memset(outArray, 0, vi.num_frames);
+        mymemset(outArray, 0, vi.num_frames);
       }
     }
     else env->ThrowError("TFM:  outputC file error (cannot create file)!");

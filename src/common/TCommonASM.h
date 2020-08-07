@@ -23,9 +23,9 @@
 #define __TCOMMONASM_H__
 
 #include "internal.h"
-#include <xmmintrin.h>
-#include <emmintrin.h>
+#include <immintrin.h>
 #include <algorithm>
+#include <intrin.h>
 
 template<int bits_per_pixel>
 AVS_FORCEINLINE int cubicInt(int p1, int p2, int p3, int p4)
@@ -59,6 +59,11 @@ void check_combing_SSE4(const uint8_t *srcp, uint8_t *dstp,
 
 void check_combing_YUY2LumaOnly_SSE4(const uint8_t *srcp, uint8_t *dstp,
   int width, int height, int src_pitch, int dst_pitch, int cthresh);
+
+template<bool with_luma_mask>
+static void check_combing_SSE4_generic(const uint8_t* srcp, uint8_t* dstp, int width,
+	int height, int src_pitch, int dst_pitch, int cthresh);
+
 
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("sse4.1")))
@@ -122,5 +127,8 @@ void blend_5050_c(uint8_t* dstp, const uint8_t* srcp1, const uint8_t* srcp2, int
 
 template<int planarType>
 void do_FillCombedPlanarUpdateCmaskByUV(uint8_t* cmkp, uint8_t* cmkpU, uint8_t* cmkpV, int Width, int Height, ptrdiff_t cmk_pitch, ptrdiff_t cmk_pitchUV);
+
+
+void mymemset(void* ptr, int v, size_t len);
 
 #endif // __TCOMMONASM_H__
