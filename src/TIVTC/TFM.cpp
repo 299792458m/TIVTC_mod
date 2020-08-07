@@ -1854,9 +1854,9 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
 
                         int sft = 0;//field==0 ? 3 : 0;
                         compareFieldsSlowCal2_SSE41(x, eax, readmsk, sft,
-                            static_cast<const uint8_t*>(prvppf), static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
-                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf),
-                            static_cast<const uint8_t*>(nxtppf), static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf), static_cast<const uint8_t*>(prvnnf),
+                            static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                            static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf), static_cast<const uint8_t*>(nxtnnf),
                             accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
 
                     }
