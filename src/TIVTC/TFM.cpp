@@ -1318,7 +1318,7 @@ int TFM::compareFieldsSlow_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame 
                     if (_mm_testz_si128(eax, _mm_set1_epi16(255))) { continue; }
 
 
-                    compareFieldsSlowCal1_SSSE3(x, eax, readmsk,
+                    compareFieldsSlowCal1_SSE41(x, eax, readmsk,
                         static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
                         static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
                         static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
@@ -1743,7 +1743,7 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
                         if (_mm_testz_si128(eax, _mm_set1_epi16(255))) { continue; }
 
 
-                        compareFieldsSlowCal1_SSSE3(x, eax, readmsk,
+                        compareFieldsSlowCal1_SSE41(x, eax, readmsk,
                             static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
                             static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
                             static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
@@ -1846,7 +1846,7 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
                         if (_mm_testz_si128(eax, _mm_set1_epi16(255))) { continue; }
 
 
-                        compareFieldsSlowCal1_SSSE3(x, eax, readmsk,
+                        compareFieldsSlowCal1_SSE41(x, eax, readmsk,
                             static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
                             static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
                             static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),

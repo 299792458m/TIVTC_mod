@@ -143,7 +143,7 @@ AVS_FORCEINLINE __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, ui
 }
 
 
-AVS_FORCEINLINE void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
+AVS_FORCEINLINE void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i readmsk,
     const uint8_t* t_prvpf, const uint8_t* t_prvnf,
     const uint8_t* t_curpf, const uint8_t* t_curf, const uint8_t* t_curnf,
     const uint8_t* t_nxtpf, const uint8_t* t_nxtnf,
