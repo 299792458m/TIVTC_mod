@@ -44,7 +44,7 @@ void checkSceneChangePlanar_2_SSE2(const uint8_t* prvp, const uint8_t* srcp,
 
 extern __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, uint8_t* t_mapp, uint8_t* t_mapn);
 
-extern void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
+extern void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i readmsk,
 	const uint8_t* t_prvpf, const uint8_t* t_prvnf,
 	const uint8_t* t_curpf, const uint8_t* t_curf, const uint8_t* t_curnf,
 	const uint8_t* t_nxtpf, const uint8_t* t_nxtnf,
