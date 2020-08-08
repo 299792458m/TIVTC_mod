@@ -225,11 +225,9 @@
       <DisableSpecificWarnings>4311;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)\include\;$(SolutionDir)\common\</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
-      <AdditionalOptions>%(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -445,7 +443,9 @@
     <ClCompile Include="TDecimateMode2.cpp" />
     <ClCompile Include="TDecimateMode7.cpp" />
     <ClCompile Include="TDecimateOut.cpp" />
-    <ClCompile Include="TFM.cpp" />
+    <ClCompile Include="TFM.cpp">
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/Qvec-report:1 /Qpar-report:2 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
     <ClCompile Include="TFMASM.cpp" />
     <ClCompile Include="TFMD2V.cpp" />
     <ClCompile Include="TFMPP.cpp" />

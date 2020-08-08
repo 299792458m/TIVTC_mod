@@ -129,7 +129,7 @@ void checkSceneChangeYUY2_2_SSE2(const uint8_t *prvp, const uint8_t *srcp,
 }
 
 
-inline __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, uint8_t* t_mapp, uint8_t* t_mapn)
+AVS_FORCEINLINE __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, uint8_t* t_mapp, uint8_t* t_mapn)
 {
     //eax = (t_mapp[ebx] << 3) + t_mapn[ebx];	 // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
     auto temp = _mm_loadu_si128((__m128i*)(t_mapp + ebx));	//128bit境界以外にアクセスするが大丈夫？ ＋配列の順番注意
@@ -143,13 +143,13 @@ inline __m128i compareFieldsSlowCal0_SSSE3(int ebx, __m128i readmsk, uint8_t* t_
 }
 
 
-inline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
+AVS_FORCEINLINE void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
     const uint8_t* t_prvpf, const uint8_t* t_prvnf,
     const uint8_t* t_curpf, const uint8_t* t_curf, const uint8_t* t_curnf,
     const uint8_t* t_nxtpf, const uint8_t* t_nxtnf,
     uint64_t& accumPc, uint64_t& accumNc, uint64_t& accumPm, uint64_t& accumNm, uint64_t& accumPml, uint64_t& accumNml)
 {
-    __m128i temp, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
+    __m128i temp,temp2, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
     __m128i zero = _mm_setzero_si128();
 
     //a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
@@ -204,19 +204,29 @@ inline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	//(diffpc>23) ? -1 : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum ssse3
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    //temp = _mm_hadd_epi16(temp, zero);						//sum ssse3 水平方向は遅い
+    //temp = _mm_hadd_epi16(temp, zero);
+    //temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);
+    temp  = _mm_add_epi16(temp, temp2);      //....7+3,6+2,5+1,4+0 = ....3,2,1,0 + ....7,6,5,4
+    temp2 = _mm_srli_si128(temp, 4);        //......      7+3,6+2
+    temp  = _mm_add_epi16(temp, temp2);      //......  7+5+3+1,6+4+2+0
+    temp2 = _mm_srli_si128(temp, 2);        //.......         7+5+3+1
+    temp  = _mm_add_epi16(temp, temp2);      //......  7+5+3+1+6+4+2+0
+    temp  = _mm_cvtepu16_epi32(temp);       //sse4.1 上位にはごみが残ってるので ダイナミックレンジは8bit*8個なので16bitで十分 符号なしでよい
     accumPc += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));	//(diffnc>23) ? -1 : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eax9∧(diffnc>23) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eax9∧(diffnc>23) ? diffnc : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNc += _mm_cvtsi128_si32(temp);
-
 
     //if ((eax & 18) != 0){
     //	if (diff_p_c > 42) {accumPm  += diff_p_c;}
@@ -229,17 +239,25 @@ inline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumPm += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNm += _mm_cvtsi128_si32(temp);
 
 
@@ -254,30 +272,38 @@ inline void compareFieldsSlowCal1_SSSE3(int ebx, __m128i eax, __m128i readmsk,
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumPml += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42)で1、else0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42)でdiffnc、else0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNml += _mm_cvtsi128_si32(temp);
 
     return;
 }
 
 
-inline void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk, int sft,
+AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk, int sft,
     const uint8_t* t_prvf0, const uint8_t* t_prvf1, const uint8_t* t_prvf2,
     const uint8_t* t_curf0, const uint8_t* t_curf1,
     const uint8_t* t_nxtf0, const uint8_t* t_nxtf1, const uint8_t* t_nxtf2,
     uint64_t& accumPc, uint64_t& accumNc, uint64_t& accumPm, uint64_t& accumNm, uint64_t& accumPml, uint64_t& accumNml)
 {
-    __m128i temp, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
+    __m128i temp,temp2, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
     __m128i zero = _mm_setzero_si128();
 
     // additional difference from TFM 1144
@@ -342,17 +368,25 @@ inline void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk, i
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumPc += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>23) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>23) ? diffnc : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNc += _mm_cvtsi128_si32(temp);
 
     //	if ((eax & 16) != 0){	//field0:16 field1:2
@@ -366,17 +400,25 @@ inline void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk, i
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumPm += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNm += _mm_cvtsi128_si32(temp);
 
     //	if ((eax & 32) != 0){	//field0:32 field1:4
@@ -390,17 +432,25 @@ inline void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i readmsk, i
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumPml += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));
     temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
     temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
-    temp = _mm_hadd_epi16(temp, zero);						//sum
-    temp = _mm_hadd_epi16(temp, zero);
-    temp = _mm_hadd_epi16(temp, zero);
+    temp2 = _mm_srli_si128(temp, 8);        //sum
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 4);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp2 = _mm_srli_si128(temp, 2);
+    temp  = _mm_add_epi16(temp, temp2);
+    temp  = _mm_cvtepu16_epi32(temp);
     accumNml += _mm_cvtsi128_si32(temp);
 }
 
