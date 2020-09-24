@@ -1735,7 +1735,31 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
         {
             int x = startx;
             if constexpr (sizeof(pixel_t) == 1) {
-                if (cpuFlags & CPUF_SSE4_1) {
+                if ((cpuFlags & CPUF_AVX2) && (incl == 1)) {   //incl=1ではレーン境界を越えられない罠によりreadが面倒なので専用 incl=2はpermuteでできるけど使わないからまたいつか
+                    auto readmsk2 = _mm256_setzero_si256();  //ダミー 使われない
+
+                    for (; x < stopx - 15; x += incl * 16)	//incl=1 or 2
+                    {
+                        __m256i eax2 = compareFieldsSlowCal0_AVX2(x, readmsk2, mapp, mapn);
+                        if (_mm256_testz_si256(eax2, _mm256_set1_epi16(255))) { continue; }
+
+                        compareFieldsSlowCal1_AVX2(x, eax2, readmsk2,
+                            static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                            static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
+
+                        int sft = 3;//field==0 ? 3 : 0;
+                        compareFieldsSlowCal2_AVX2(x, eax2, readmsk2, sft,
+                            static_cast<const uint8_t*>(prvppf), static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf),
+                            static_cast<const uint8_t*>(nxtppf), static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
+
+                    }
+                    _mm256_zeroupper();
+                }
+                else if (cpuFlags & CPUF_SSE4_1) {
                     for (; x < stopx - 7; x += incl * 8)	//incl=1 or 2
                     {
                         __m128i eax = compareFieldsSlowCal0_SSSE3(x, readmsk, mapp, mapn);
@@ -1752,7 +1776,7 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
                         int sft = 3;//field==0 ? 3 : 0;
                         compareFieldsSlowCal2_SSE41(x, eax, readmsk, sft,
                             static_cast<const uint8_t*>(prvppf), static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
-                            static_cast<const uint8_t*>(curpf),  static_cast<const uint8_t*>(curf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf),
                             static_cast<const uint8_t*>(nxtppf), static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
                             accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
 
@@ -1838,7 +1862,30 @@ int TFM::compareFieldsSlow2_core(PVideoFrame &prv, PVideoFrame &src, PVideoFrame
         {
             int x = startx;
             if constexpr (sizeof(pixel_t) == 1) {
-                if (cpuFlags & CPUF_SSE4_1) {
+                if ((cpuFlags & CPUF_AVX2) && (incl == 1)) {   //incl=1ではレーン境界を越えられない罠によりreadが面倒なので専用 incl=2はpermuteでできるけど使わないからまたいつか
+                    auto readmsk2 = _mm256_setzero_si256();  //ダミー 使われない
+
+                    for (; x < stopx - 15; x += incl * 16)	//incl=1 or 2
+                    {
+                        __m256i eax2 = compareFieldsSlowCal0_AVX2(x, readmsk2, mapp, mapn);
+                        if (_mm256_testz_si256(eax2, _mm256_set1_epi16(255))) { continue; }
+
+                        compareFieldsSlowCal1_AVX2(x, eax2, readmsk2,
+                            static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf),
+                            static_cast<const uint8_t*>(curpf), static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                            static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
+
+                        int sft = 0;//field==0 ? 3 : 0;
+                        compareFieldsSlowCal2_AVX2(x, eax2, readmsk2, sft,
+                            static_cast<const uint8_t*>(prvpf), static_cast<const uint8_t*>(prvnf), static_cast<const uint8_t*>(prvnnf),
+                            static_cast<const uint8_t*>(curf), static_cast<const uint8_t*>(curnf),
+                            static_cast<const uint8_t*>(nxtpf), static_cast<const uint8_t*>(nxtnf), static_cast<const uint8_t*>(nxtnnf),
+                            accumPc, accumNc, accumPm, accumNm, accumPml, accumNml);
+                    }
+                    _mm256_zeroupper();
+                }
+                else if (cpuFlags & CPUF_SSE4_1) {
                     for (; x < stopx - 7; x += incl * 8)	//incl=1 or 2
                     {
                         __m128i eax = compareFieldsSlowCal0_SSSE3(x, readmsk, mapp, mapn);
