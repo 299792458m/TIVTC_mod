@@ -325,9 +325,8 @@
       <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
       <PreprocessorDefinitions>WIN32;NOMINMAX;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_USRDLL;TIVTC_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ExpandAttributedSource>false</ExpandAttributedSource>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
@@ -339,6 +338,7 @@
       <AdditionalOptions>%(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <ConformanceMode>true</ConformanceMode>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <OutputFile>$(OutDir)TIVTC.dll</OutputFile>
@@ -348,6 +348,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <ImportLibrary>$(OutDir)TIVTC.lib</ImportLibrary>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseXP|x64'">

@@ -202,8 +202,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&9 != 0) ? -1 : 0
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));	//(diffpc>23) ? -1 : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffpc>23) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
     //temp = _mm_hadd_epi16(temp, zero);						//sum ssse3 水平方向は遅い
     //temp = _mm_hadd_epi16(temp, zero);
     //temp = _mm_hadd_epi16(temp, zero);
@@ -213,19 +213,20 @@ AVS_FORCEINLINE void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i r
     temp  = _mm_add_epi16(temp, temp2);      //......  7+5+3+1,6+4+2+0
     temp2 = _mm_srli_si128(temp, 2);        //.......         7+5+3+1
     temp  = _mm_add_epi16(temp, temp2);      //......  7+5+3+1+6+4+2+0
-    temp  = _mm_cvtepu16_epi32(temp);       //sse4.1 上位にはごみが残ってるので ダイナミックレンジは8bit*8個なので16bitで十分 符号なしでよい
+    //temp  = _mm_cvtepu16_epi32(temp);       //sse4.1 上位にはごみが残ってるので ダイナミックレンジは16bitで十分 符号なしでよい
+    temp = _mm_and_si128(temp, _mm_set_epi16(0,0,0,0,0,0,0,-1));
     accumPc += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));	//(diffnc>23) ? -1 : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eax9∧(diffnc>23) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eax9∧(diffnc>23) ? diffnc : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eax9∧(diffnc>23) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_n_c);					//eax9∧(diffnc>23) ? diffnc : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 2);
     temp  = _mm_add_epi16(temp, temp2);
-    temp  = _mm_cvtepu16_epi32(temp);
+    temp = _mm_and_si128(temp, _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, -1));
     accumNc += _mm_cvtsi128_si32(temp);
 
     //if ((eax & 18) != 0){
@@ -237,27 +238,27 @@ AVS_FORCEINLINE void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&18 != 0) ? -1 : 0
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);				    	//eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 2);
     temp  = _mm_add_epi16(temp, temp2);
-    temp  = _mm_cvtepu16_epi32(temp);
+    temp = _mm_and_si128(temp, _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, -1));
     accumPm += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 2);
     temp  = _mm_add_epi16(temp, temp2);
-    temp  = _mm_cvtepu16_epi32(temp);
+    temp = _mm_and_si128(temp, _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, -1));
     accumNm += _mm_cvtsi128_si32(temp);
 
 
@@ -270,27 +271,27 @@ AVS_FORCEINLINE void compareFieldsSlowCal1_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);	//(eax&36 != 0) ? -1 : 0
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));	//(diffpc>42) ? ffff : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 2);
     temp  = _mm_add_epi16(temp, temp2);
-    temp  = _mm_cvtepu16_epi32(temp);
+    temp = _mm_and_si128(temp, _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, -1));
     accumPml += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));	//(diffnc>42) ? ffff : 0
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42)で1、else0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42)でdiffnc、else0
+    temp = _mm_and_si128(temp, eaxmsk);				    	//eaxmsk∧(diffnc>42)で1、else0
+    temp = _mm_and_si128(temp, diff_n_c);					//eaxmsk∧(diffnc>42)でdiffnc、else0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 2);
     temp  = _mm_add_epi16(temp, temp2);
-    temp  = _mm_cvtepu16_epi32(temp);
+    temp = _mm_and_si128(temp, _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, -1));
     accumNml += _mm_cvtsi128_si32(temp);
 
     return;
@@ -366,8 +367,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&8 == 0) ? 0 : -1
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(23));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>23) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffpc>23) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -378,8 +379,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     accumPc += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(23));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>23) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>23) ? diffnc : 0
+    temp = _mm_and_si128(temp, eaxmsk);				    	//eaxmsk∧(diffnc>23) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_n_c);					//eaxmsk∧(diffnc>23) ? diffnc : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -398,8 +399,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&16 == 0) ? 0 : -1
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -410,8 +411,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     accumPm += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);					    //eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -430,8 +431,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     eaxmsk = _mm_cmpeq_epi16(temp, zero);					//(eax&32 == 0) ? 0 : -1
 
     temp = _mm_cmpgt_epi16(diff_p_c, _mm_set1_epi16(42));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffpc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);				    	//eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -442,8 +443,8 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     accumPml += _mm_cvtsi128_si32(temp);
 
     temp = _mm_cmpgt_epi16(diff_n_c, _mm_set1_epi16(42));
-    temp = _mm_mullo_epi16(temp, eaxmsk);					//eaxmsk∧(diffnc>42) ? 1 : 0
-    temp = _mm_mullo_epi16(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    temp = _mm_and_si128(temp, eaxmsk);				    	//eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm_and_si128(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
     temp2 = _mm_srli_si128(temp, 8);        //sum
     temp  = _mm_add_epi16(temp, temp2);
     temp2 = _mm_srli_si128(temp, 4);
@@ -452,5 +453,370 @@ AVS_FORCEINLINE void compareFieldsSlowCal2_SSE41(int ebx, __m128i eax, __m128i r
     temp  = _mm_add_epi16(temp, temp2);
     temp  = _mm_cvtepu16_epi32(temp);
     accumNml += _mm_cvtsi128_si32(temp);
+}
+
+
+AVS_FORCEINLINE __m256i compareFieldsSlowCal0_AVX2(int ebx, __m256i readmsk, uint8_t* t_mapp, uint8_t* t_mapn)
+{
+    //eax = (t_mapp[ebx] << 3) + t_mapn[ebx];	 // diff from prev asm block (at buildDiffMapPlane2): <<3 instead of <<2
+    auto temp0 = _mm_loadu_si128((__m128i*)(t_mapp + ebx));	//128bit境界以外にアクセスするが大丈夫？ ＋配列の順番注意
+    auto temp = _mm256_cvtepu8_epi16(temp0);		//incl==1では下位8個を16bitに展開、==2では2byte毎だが、2はレーン境界を超えるのが面倒なのでとりあえず除いてある
+    __m256i eax = _mm256_slli_epi16(temp, 3);		//ssse3 to do shift and mul... 8bit命令はない
+    temp0 = _mm_loadu_si128((__m128i*)(t_mapn + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    eax = _mm256_add_epi16(eax, temp);
+
+    return eax;
+}
+
+
+AVS_FORCEINLINE void compareFieldsSlowCal1_AVX2(int ebx, __m256i eax, __m256i readmsk,
+    const uint8_t* t_prvpf, const uint8_t* t_prvnf,
+    const uint8_t* t_curpf, const uint8_t* t_curf, const uint8_t* t_curnf,
+    const uint8_t* t_nxtpf, const uint8_t* t_nxtnf,
+    uint64_t& accumPc, uint64_t& accumNc, uint64_t& accumPm, uint64_t& accumNm, uint64_t& accumPml, uint64_t& accumNml)
+{
+    __m128i temp0;
+    __m256i temp, temp2, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
+    __m256i zero = _mm256_setzero_si256();
+
+    //a_curr = t_curpf[ebx] + (t_curf[ebx] << 2) + t_curnf[ebx];
+    temp0 = _mm_loadu_si128((__m128i*)(t_curpf + ebx));
+    a_curr = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_curf + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    temp = _mm256_slli_epi16(temp, 2);
+    a_curr = _mm256_add_epi16(a_curr, temp);
+    temp0 = _mm_loadu_si128((__m128i*)(t_curnf + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_curr = _mm256_add_epi16(a_curr, temp);
+
+
+    //a_prev = 3 * (t_prvpf[ebx] + t_prvnf[ebx]);
+    temp0 = _mm_loadu_si128((__m128i*)(t_prvpf + ebx));
+    a_prev = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_prvnf + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_prev = _mm256_add_epi16(a_prev, temp);
+    temp = _mm256_set1_epi16(3);
+    a_prev = _mm256_mullo_epi16(a_prev, temp);
+
+
+    //a_next = 3 * (t_nxtpf[ebx] + t_nxtnf[ebx]);
+    temp0 = _mm_loadu_si128((__m128i*)(t_nxtpf + ebx));
+    a_next = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_nxtnf + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_next = _mm256_add_epi16(a_next, temp);
+    temp = _mm256_set1_epi16(3);
+    a_next = _mm256_mullo_epi16(a_next, temp);
+
+
+    //diff_p_c = abs(a_prev - a_curr);
+    temp = _mm256_sub_epi16(a_prev, a_curr);
+    diff_p_c = _mm256_abs_epi16(temp);	//ssse3
+
+    //diff_n_c = abs(a_next - a_curr);
+    temp = _mm256_sub_epi16(a_next, a_curr);
+    diff_n_c = _mm256_abs_epi16(temp);
+
+    //if ((eax & 9) != 0){
+    //	if (diff_p_c > 23) {accumPc  += diff_p_c;}
+    //	if (diff_n_c > 23) {accumNc  += diff_n_c;}
+    //}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(9));
+    temp = _mm256_cmpeq_epi16(temp, zero);		//(eax&9 == 0) ? -1 : 0
+    //auto eaxmsk = _mm256_add_epi16(temp, _mm256_set1_epi16(1));	//(eax&9 == 0) ? 0 : 1
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);	//(eax&9 != 0) ? -1 : 0
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(23));	//(diffpc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffpc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+
+    //temp = _mm256_hadd_epi16(temp, zero);						//sum
+    //temp = _mm256_hadd_epi16(temp, zero);
+    //temp = _mm256_hadd_epi16(temp, zero);
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);           //レーン入れ替え
+    temp = _mm256_add_epi16(temp, temp2);      //レーン上下を足し合わせ
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);      //....7+3,6+2,5+1,4+0 <= ....3,2,1,0 + ....7,6,5,4
+    temp2 = _mm256_srli_si256(temp, 4);        //......      7+3,6+2
+    temp = _mm256_add_epi16(temp, temp2);      //......  7+5+3+1,6+4+2+0
+    temp2 = _mm256_srli_si256(temp, 2);        //.......         7+5+3+1
+    temp = _mm256_add_epi16(temp, temp2);      //......  7+5+3+1+6+4+2+0
+    //temp = _mm256_cvtepu16_epi32(temp);       //sse4.1 上位にはごみが残ってるので ダイナミックレンジは16bitで十分 符号なしでよい
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));   //→消せばいいだけならANDでいのでは
+    accumPc += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(23));	//(diffnc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eax9∧(diffnc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eax9∧(diffnc>23) ? diffnc : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNc += _mm256_cvtsi256_si32(temp);
+
+    //if ((eax & 18) != 0){
+    //	if (diff_p_c > 42) {accumPm  += diff_p_c;}
+    //	if (diff_n_c > 42) {accumNm  += diff_n_c;}
+    //}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(18));
+    temp = _mm256_cmpeq_epi16(temp, zero);		//(eax&18 == 0) ? -1 : 0
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);	//(eax&18 != 0) ? -1 : 0
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(42));	//(diffpc>42) ? ffff : 0
+    temp = _mm256_and_si256(temp, eaxmsk);				    	//eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumPm += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(42));	//(diffnc>42) ? ffff : 0
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNm += _mm256_cvtsi256_si32(temp);
+
+
+    //if ((eax & 36) != 0){
+    //	if (diff_p_c > 42) {accumPml += diff_p_c;}
+    //	if (diff_n_c > 42) {accumNml += diff_n_c;}
+    //}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(36));
+    temp = _mm256_cmpeq_epi16(temp, zero);		//(eax&36 == 0) ? -1 : 0
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);	//(eax&36 != 0) ? -1 : 0
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(42));	//(diffpc>42) ? ffff : 0
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumPml += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(42));	//(diffnc>42) ? ffff : 0
+    temp = _mm256_and_si256(temp, eaxmsk);				    	//eaxmsk∧(diffnc>42)で1、else0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eaxmsk∧(diffnc>42)でdiffnc、else0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNml += _mm256_cvtsi256_si32(temp);
+
+    return;
+}
+
+
+AVS_FORCEINLINE void compareFieldsSlowCal2_AVX2(int ebx, __m256i eax, __m256i readmsk, int sft,
+    const uint8_t* t_prvf0, const uint8_t* t_prvf1, const uint8_t* t_prvf2,
+    const uint8_t* t_curf0, const uint8_t* t_curf1,
+    const uint8_t* t_nxtf0, const uint8_t* t_nxtf1, const uint8_t* t_nxtf2,
+    uint64_t& accumPc, uint64_t& accumNc, uint64_t& accumPm, uint64_t& accumNm, uint64_t& accumPml, uint64_t& accumNml)
+{
+    __m128i temp0;
+    __m256i temp, temp2, a_curr, a_prev, a_next, diff_p_c, diff_n_c, eaxmsk;
+    __m256i zero = _mm256_setzero_si256();
+
+    // additional difference from TFM 1144
+
+    //if ((eax & 56) == 0) continue; //field0
+    //if ((eax &  7) == 0) continue; //field1
+    temp = _mm256_set1_epi16(7 << sft);
+    if (_mm256_testz_si256(eax, temp)) { return; }	//sse4.1
+
+    //	a_curr = 3 * (t_curpf[ebx] + t_curf[ebx]);	//field0
+    //	a_curr = 3 * (t_curf[ebx] + t_curnf[ebx]);	//field1
+    temp0 = _mm_loadu_si128((__m128i*)(t_curf0 + ebx));
+    a_curr = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_curf1 + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_curr = _mm256_add_epi16(a_curr, temp);
+    temp = _mm256_set1_epi16(3);
+    a_curr = _mm256_mullo_epi16(a_curr, temp);
+
+
+    //	a_prev = t_prvppf[ebx] + (t_prvpf[ebx] << 2) + t_prvnf[ebx];	//field0
+    //	a_prev = t_prvpf[ebx] + (t_prvnf[ebx] << 2) + t_prvnnf[ebx];	//field1
+    temp0 = _mm_loadu_si128((__m128i*)(t_prvf0 + ebx));
+    a_prev = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_prvf1 + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    temp = _mm256_slli_epi16(temp, 2);
+    a_prev = _mm256_add_epi16(a_prev, temp);
+    temp0 = _mm_loadu_si128((__m128i*)(t_prvf2 + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_prev = _mm256_add_epi16(a_prev, temp);
+
+
+    //	a_next = t_nxtppf[ebx] + (t_nxtpf[ebx] << 2) + t_nxtnf[ebx];	//field0
+    //	a_next = t_nxtpf[ebx] + (t_nxtnf[ebx] << 2) + t_nxtnnf[ebx];	//field1
+    temp0 = _mm_loadu_si128((__m128i*)(t_nxtf0 + ebx));
+    a_next = _mm256_cvtepu8_epi16(temp0);
+    temp0 = _mm_loadu_si128((__m128i*)(t_nxtf1 + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    temp = _mm256_slli_epi16(temp, 2);
+    a_next = _mm256_add_epi16(a_next, temp);
+    temp0 = _mm_loadu_si128((__m128i*)(t_nxtf2 + ebx));
+    temp = _mm256_cvtepu8_epi16(temp0);
+    a_next = _mm256_add_epi16(a_next, temp);
+
+    //	diff_p_c = abs(a_prev - a_curr);
+    temp = _mm256_sub_epi16(a_prev, a_curr);
+    diff_p_c = _mm256_abs_epi16(temp);
+
+    //	diff_n_c = abs(a_next - a_curr);
+    temp = _mm256_sub_epi16(a_next, a_curr);
+    diff_n_c = _mm256_abs_epi16(temp);
+
+    //	if ((eax & 8) != 0){	//field0:8 field1:1
+    //		if (diff_p_c > 23) {accumPc  += diff_p_c;}
+    //		if (diff_n_c > 23) {accumNc  += diff_n_c;}
+    //	}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(1 << sft));		//
+    temp = _mm256_cmpeq_epi16(temp, zero);						//(eax&8 == 0) ? -1 : 0
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);					//(eax&8 == 0) ? 0 : -1
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(23));
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffpc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>23) ? diffpc : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumPc += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(23));
+    temp = _mm256_and_si256(temp, eaxmsk);				    	//eaxmsk∧(diffnc>23) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eaxmsk∧(diffnc>23) ? diffnc : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNc += _mm256_cvtsi256_si32(temp);
+
+    //	if ((eax & 16) != 0){	//field0:16 field1:2
+    //		if (diff_p_c > 42) {accumPm  += diff_p_c;}
+    //		if (diff_n_c > 42) {accumNm  += diff_n_c;}
+    //	}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(2 << sft));
+    temp = _mm256_cmpeq_epi16(temp, zero);						//(eax&16 == 0) ? -1 : 0
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);					//(eax&16 == 0) ? 0 : -1
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(42));
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumPm += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(42));
+    temp = _mm256_and_si256(temp, eaxmsk);					    //eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNm += _mm256_cvtsi256_si32(temp);
+
+    //	if ((eax & 32) != 0){	//field0:32 field1:4
+    //		if (diff_p_c > 42) {accumPml += diff_p_c;}
+    //		if (diff_n_c > 42) {accumNml += diff_n_c;}
+    //	}
+    temp = _mm256_and_si256(eax, _mm256_set1_epi16(4 << sft));		//
+    temp = _mm256_cmpeq_epi16(temp, zero);						//(eax&32 == 0) ? -1 : 0
+    eaxmsk = _mm256_cmpeq_epi16(temp, zero);					//(eax&32 == 0) ? 0 : -1
+
+    temp = _mm256_cmpgt_epi16(diff_p_c, _mm256_set1_epi16(42));
+    temp = _mm256_and_si256(temp, eaxmsk);				    	//eaxmsk∧(diffpc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_p_c);					//eaxmsk∧(diffpc>42) ? diff_p_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumPml += _mm256_cvtsi256_si32(temp);
+
+    temp = _mm256_cmpgt_epi16(diff_n_c, _mm256_set1_epi16(42));
+    temp = _mm256_and_si256(temp, eaxmsk);				    	//eaxmsk∧(diffnc>42) ? -1 : 0
+    temp = _mm256_and_si256(temp, diff_n_c);					//eaxmsk∧(diffnc>42) ? diff_n_c : 0
+    //sum
+    temp2 = _mm256_permute2x128_si256(temp, zero, 1);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 8);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 4);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp2 = _mm256_srli_si256(temp, 2);
+    temp = _mm256_add_epi16(temp, temp2);
+    temp = _mm256_and_si256(temp, _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1));
+    accumNml += _mm256_cvtsi256_si32(temp);
 }
 
