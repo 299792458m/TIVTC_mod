@@ -94,11 +94,11 @@ void TDeinterlace::buildDiffMapPlane_Planar(const uint8_t *prvp, const uint8_t *
 {
   buildABSDiffMask<pixel_t>(prvp - prv_pitch, nxtp - nxt_pitch, prv_pitch, nxt_pitch, tpitch, Width, Height >> 1, env);
   switch (bits_per_pixel) {
-  case 8: AnalyzeDiffMask_Planar<uint8_t, 8>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 10: AnalyzeDiffMask_Planar<uint16_t, 10>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 12: AnalyzeDiffMask_Planar<uint16_t, 12>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 14: AnalyzeDiffMask_Planar<uint16_t, 14>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 16: AnalyzeDiffMask_Planar<uint16_t, 16>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
+  case 8: AnalyzeDiffMask_Planar<uint8_t, 8>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 10: AnalyzeDiffMask_Planar<uint16_t, 10>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 12: AnalyzeDiffMask_Planar<uint16_t, 12>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 14: AnalyzeDiffMask_Planar<uint16_t, 14>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 16: AnalyzeDiffMask_Planar<uint16_t, 16>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
   }
 }
 // instantiate

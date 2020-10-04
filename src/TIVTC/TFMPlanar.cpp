@@ -57,6 +57,7 @@ void checkCombedPlanarAnalyze_core(const VideoInfo& vi, int cthresh, bool chroma
 
   const bool use_sse2 = (cpuFlags & CPUF_SSE2) ? true : false;
   const bool use_sse4 = (cpuFlags & CPUF_SSE4_1) ? true : false;
+  const bool use_avx2 = (cpuFlags & CPUF_AVX2) ? true : false;
   // cthresh: Area combing threshold used for combed frame detection.
   // This essentially controls how "strong" or "visible" combing must be to be detected.
   // Good values are from 6 to 12. If you know your source has a lot of combed frames set 
@@ -132,7 +133,9 @@ void checkCombedPlanarAnalyze_core(const VideoInfo& vi, int cthresh, bool chroma
       cmkp += cmk_pitch;
       // middle Height - 4
       const int lines_to_process = Height - 4;
-      if (use_sse4 && sizeof(pixel_t) == 1)
+      if (use_avx2 && sizeof(pixel_t) == 1)
+        check_combing_AVX2((const uint8_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
+      else if (use_sse4 && sizeof(pixel_t) == 1)
         check_combing_SSE4((const uint8_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
       else if (use_sse4 && sizeof(pixel_t) == 2)
         check_combing_uint16_SSE4((const uint16_t*)srcp, cmkp, Width, lines_to_process, src_pitch, cmk_pitch, scaled_cthresh);
@@ -444,11 +447,11 @@ void TFM::buildDiffMapPlane_Planar(const uint8_t *prvp, const uint8_t *nxtp,
 {
   buildABSDiffMask<pixel_t>(prvp - prv_pitch, nxtp - nxt_pitch, prv_pitch, nxt_pitch, tpitch, Width, Height >> 1, env);
   switch (bits_per_pixel) {
-  case 8: AnalyzeDiffMask_Planar<uint8_t, 8>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 10: AnalyzeDiffMask_Planar<uint16_t, 10>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 12: AnalyzeDiffMask_Planar<uint16_t, 12>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 14: AnalyzeDiffMask_Planar<uint16_t, 14>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
-  case 16: AnalyzeDiffMask_Planar<uint16_t, 16>(dstp, dst_pitch, tbuffer, tpitch, Width, Height); break;
+  case 8: AnalyzeDiffMask_Planar<uint8_t, 8>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 10: AnalyzeDiffMask_Planar<uint16_t, 10>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 12: AnalyzeDiffMask_Planar<uint16_t, 12>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 14: AnalyzeDiffMask_Planar<uint16_t, 14>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
+  case 16: AnalyzeDiffMask_Planar<uint16_t, 16>(dstp, dst_pitch, tbuffer, tpitch, Width, Height, cpuFlags); break;
   }
 }
 

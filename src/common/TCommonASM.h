@@ -60,10 +60,12 @@ void check_combing_SSE4(const uint8_t *srcp, uint8_t *dstp,
 void check_combing_YUY2LumaOnly_SSE4(const uint8_t *srcp, uint8_t *dstp,
   int width, int height, int src_pitch, int dst_pitch, int cthresh);
 
+void check_combing_AVX2(const uint8_t* srcp, uint8_t* dstp,
+	int width, int height, int src_pitch, int dst_pitch, int cthresh);
+
 template<bool with_luma_mask>
 static void check_combing_SSE4_generic(const uint8_t* srcp, uint8_t* dstp, int width,
 	int height, int src_pitch, int dst_pitch, int cthresh);
-
 
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("sse4.1")))
@@ -93,7 +95,7 @@ void do_buildABSDiffMask(const uint8_t* prvp, const uint8_t* nxtp, uint8_t* tbuf
   int prv_pitch, int nxt_pitch, int tpitch, int width, int height, bool YUY2_LumaOnly, int cpuFlags);
 
 template<typename pixel_t, int bits_per_pixel>
-void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer, int tpitch, int Width, int Height);
+void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer, int tpitch, int Width, int Height, int cpuFlags);
 void AnalyzeDiffMask_YUY2(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer, int tpitch, int Width, int Height, bool mChroma);
 
 
