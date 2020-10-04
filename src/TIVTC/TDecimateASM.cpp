@@ -278,60 +278,23 @@ void calcLumaDiffYUY2SSD_SSE2_16(const uint8_t *prvp, const uint8_t *nxtp,
 }
 
 template<int blkSizeY>
-void calcSAD_SSE2_16xN(const uint8_t* ptr1, const uint8_t* ptr2,
+inline void calcSAD_SSE2_16xN(const uint8_t* ptr1, const uint8_t* ptr2,
   int pitch1, int pitch2, int& sad)
 {
   assert(0 == blkSizeY % 8);
 
   __m128i tmpsum = _mm_setzero_si128();
   // unrolled loop
-  for (int i = 0; i < blkSizeY / 8; i++) {
-    __m128i xmm0, xmm1,xmm2,xmm3;
-    xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp1 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp2 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp3 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_load_si128(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp4 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_add_epi32(tmp1, tmp2);
-    xmm1 = _mm_add_epi32(tmp3, tmp4);
-    tmpsum = _mm_add_epi32(tmpsum, xmm0);
-    tmpsum = _mm_add_epi32(tmpsum, xmm1);
+  for (int i = 0; i < blkSizeY; i++) {
+      __m128i xmm0, xmm1;
+      xmm0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr1));
+      xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr2));
+      ptr1 += pitch1;
+      ptr2 += pitch2;
+      xmm0 = _mm_sad_epu8(xmm0, xmm1);
+      tmpsum = _mm_add_epi32(tmpsum, xmm0);
   }
+
   __m128i sum = _mm_add_epi32(tmpsum, _mm_srli_si128(tmpsum, 8)); // add lo, hi
   sad = _mm_cvtsi128_si32(sum);
 }
@@ -403,60 +366,22 @@ void calcSAD_SSE2_4xN(const uint8_t *ptr1, const uint8_t *ptr2,
 }
 
 template<int blkSizeY>
-void calcSAD_SSE2_8xN(const uint8_t *ptr1, const uint8_t *ptr2,
+inline void calcSAD_SSE2_8xN(const uint8_t *ptr1, const uint8_t *ptr2,
   int pitch1, int pitch2, int &sad)
 {
   assert(0 == blkSizeY % 8);
 
   __m128i tmpsum = _mm_setzero_si128();
   // blkSizeY should be multiple of 8
-  // unrolled loop
-  for (int i = 0; i < blkSizeY / 8; i++) {
-    __m128i xmm0, xmm1,xmm2,xmm3;
-    xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp1 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp2 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp3 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2;
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
-    xmm2 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
-    xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1 + pitch1));
-    xmm3 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2 + pitch2));
-    xmm0 = _mm_sad_epu8(xmm0, xmm2);
-    xmm1 = _mm_sad_epu8(xmm1, xmm3);
-    __m128i tmp4 = _mm_add_epi32(xmm0, xmm1);
-    ptr1 += pitch1 * 2; // if last, no need more, hope compiler solves it
-    ptr2 += pitch2 * 2;
-
-    xmm0 = _mm_add_epi32(tmp1, tmp2);
-    xmm1 = _mm_add_epi32(tmp3, tmp4);
-    tmpsum = _mm_add_epi32(tmpsum, xmm0);
-    tmpsum = _mm_add_epi32(tmpsum, xmm1);
+  // unrolled loopでもよかったけど速度が変わらないのでここはコンパイラに任せる
+  for (int i = 0; i < blkSizeY; i++) {
+      __m128i xmm0, xmm1;
+      xmm0 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr1));
+      xmm1 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(ptr2));
+      ptr1 += pitch1;
+      ptr2 += pitch2;
+      xmm0 = _mm_sad_epu8(xmm0, xmm1);
+      tmpsum = _mm_add_epi32(tmpsum, xmm0);
   }
 
   sad = _mm_cvtsi128_si32(tmpsum); // we have only lo

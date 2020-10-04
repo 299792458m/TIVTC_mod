@@ -460,11 +460,7 @@ static AVS_FORCEINLINE void AnalyzeOnePixel(uint8_t* dstp,
   }
 }
 
-template<> 
-#if defined(GCC) || defined(CLANG)
-__attribute__((__target__("sse4.2")))
-#endif
-static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
+static inline void AnalyzeOnePixel_AVX2_881(uint8_t* dstp,
     const uint8_t* dppp, const uint8_t* dpp,
     const uint8_t* dp,
     const uint8_t* dpn, const uint8_t* dpnn,
@@ -479,37 +475,41 @@ static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
     //if (_mm_testz_si128(temp, _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-4)))
     if ((dp_d & 0x0000FC00) == 0)
     {
-        auto temp = _mm_loadu_si128((__m128i*)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
-        if (_mm_testz_si128(temp, _mm_set1_epi8(-4))) {	//sse4.1
-            //do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
-            //    x += 16;
-            //    temp = _mm_loadu_si128((__m128i*)(dp + x));
-            //} while ((_mm_testz_si128(temp, _mm_set1_epi8(-4))) && (x < Width));
+        auto temp = _mm256_loadu_si256((__m256i*)(dp + x));	//x=1から始まるのが気になるが、速度的にはあまり変わらないっぽい
+        if (_mm256_testz_si256(temp, _mm256_set1_epi8(-4))) {	//sse4.1
+            //x += 31;return; //連続スキップなしの時
+            do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
+                x += 32;
+                temp = _mm256_loadu_si256((__m256i*)(dp + x));
+            } while ((_mm256_testz_si256(temp, _mm256_set1_epi8(-4))) && (x < Width));
             //x--;return;	//continue時に++されるから
-            x += 15;return; //連続スキップなしの時
         }
 
-        temp = _mm_and_si128(temp, _mm_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
-        temp = _mm_cmpeq_epi8(temp, _mm_setzero_si128());	// <=3 ? ff : 0
-        tmpi = _mm_movemask_epi8(temp);	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
-        tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1  上位16bitには1が入る andnotを使うよりも何故か速い
+        temp = _mm256_and_si256(temp, _mm256_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
+        temp = _mm256_cmpeq_epi8(temp, _mm256_setzero_si256());	// <=3 ? ff : 0
+        tmpi = _mm256_movemask_epi8(temp);	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
 
         //この時点で <=3 ? 0 : 1
 
         //tzcntの場合(BMIが使える≒AVX2)
-        //tmpi = _tzcnt_u32(tmpi);	//tzcntの場合(BMI) bsfより高速
-        //x += tmpi-1; return;		//continue後(forのpost)に+1されるので-1
+        //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1  si128では上位16bitには1が入る andnotを使うよりも何故か速い
+        //tmpi = _mm_tzcnt_32(tmpi);	        //tzcntの場合(BMI) bsfより高速
+        //x += tmpi -1; return;	//continue後(forのpost)に+1されるので-1
 
         //popcntで代替≒SSE42
-        tmpi = _mm_popcnt_u32(~tmpi & (tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
-        x += tmpi - 1; return;		//continue後(forのpost)に+1されるので-1
-        //x += tmpi;				//continueしない場合
+        tmpi = _mm_popcnt_u32(tmpi & (~tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
+        //x += tmpi - 1; return;                //continue後(forのpost)に+1されるので-1
+        x += tmpi;
+        dp_d = *(unsigned int*)(dp + x - 1);	//continueしない場合
 
         //bsfの場合 POPCNTも使えないならこうなる
         //long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
+        //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1
         //_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
         //x += tmpl-1;					//continue後(forのpost)に+1されるので-1
         //continue;
+
+        _mm256_zeroupper();
     }
 
     //8近傍がすべて<=3でスキップ
@@ -519,7 +519,7 @@ static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
     dpp_d = *(unsigned int*)(dpp + x - 1);
     dpn_d = *(unsigned int*)(dpn + x - 1);		//範囲(Width)を超えてアクセスするので注意
 
-    if (((dp_d & 0x00FC00FC) == 0) && ((dpp_d & 0x00FCFCFC) == 0) && ((dpn_d & 0x00FCFCFC) == 0))	return;
+    if (((dp_d & 0x00FC00FC) | (dpp_d & 0x00FCFCFC) | (dpn_d & 0x00FCFCFC)) == 0)	return;
     //if ( _mm_testz_si128(temp, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
 
     dstp[x] = 1;	//+=1
@@ -569,7 +569,7 @@ static AVS_FORCEINLINE void AnalyzeOnePixel<uint8_t, 8, 1>(uint8_t* dstp,
     //64bitの演算をするより↓の方が早い気が
     switch (size) {
     case 0:				msk = _mm_set_epi32(0, 0, 0, 0);				break;
-    case 1:				msk = _mm_set_epi32(0, 0, 0, 0xff);			break;
+    case 1:				msk = _mm_set_epi32(0, 0, 0, 0xff);			    break;
     case 2:				msk = _mm_set_epi32(0, 0, 0, 0xffff);				break;
     case 3:				msk = _mm_set_epi32(0, 0, 0, 0xffffff);				break;
     case 4:				msk = _mm_set_epi32(0, 0, 0, 0xffffffff);				break;
@@ -636,7 +636,7 @@ template<typename pixel_t, int bits_per_pixel>
 #if defined(GCC) || defined(CLANG)
 __attribute__((__target__("sse4.2")))
 #endif
-void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height)
+void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags)
 {
   tpitch /= sizeof(pixel_t);
   const pixel_t* tbuffer = reinterpret_cast<const pixel_t*>(tbuffer8);
@@ -646,24 +646,42 @@ void AnalyzeDiffMask_Planar(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int
   const pixel_t* dpn = tbuffer + tpitch * 2;
   const pixel_t* dpnn = tbuffer + tpitch * 3;
 
-  for (int y = 2; y < Height - 2; y += 2) {
-    for (int x = 1; x < Width - 1; x++) {
-      AnalyzeOnePixel<pixel_t, bits_per_pixel, 1>(dstp, dppp, dpp, dp, dpn, dpnn, x, y, Width, Height);
+  if (cpuFlags & CPUF_AVX2) {
+    for (int y = 2; y < Height - 2; y += 2) {
+        for (int x = 1; x < Width - 1; x++) {
+            if constexpr (sizeof(pixel_t) == 1)
+                AnalyzeOnePixel_AVX2_881(dstp, dppp, dpp, dp, dpn, dpnn, x, y, Width, Height);
+            else
+                AnalyzeOnePixel<pixel_t, bits_per_pixel, 1>(dstp, dppp, dpp, dp, dpn, dpnn, x, y, Width, Height);
+        }
+        dppp += tpitch;
+        dpp += tpitch;
+        dp += tpitch;
+        dpn += tpitch;
+        dpnn += tpitch;
+        dstp += dst_pitch;
     }
-    dppp += tpitch;
-    dpp += tpitch;
-    dp += tpitch;
-    dpn += tpitch;
-    dpnn += tpitch;
-    dstp += dst_pitch;
+  }
+  else {
+      for (int y = 2; y < Height - 2; y += 2) {
+          for (int x = 1; x < Width - 1; x++) {
+              AnalyzeOnePixel<pixel_t, bits_per_pixel, 1>(dstp, dppp, dpp, dp, dpn, dpnn, x, y, Width, Height);
+          }
+          dppp += tpitch;
+          dpp += tpitch;
+          dp += tpitch;
+          dpn += tpitch;
+          dpnn += tpitch;
+          dstp += dst_pitch;
+      }
   }
 }
 // instantiate
-template void AnalyzeDiffMask_Planar<uint8_t,8>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height);
-template void AnalyzeDiffMask_Planar<uint16_t, 10>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height);
-template void AnalyzeDiffMask_Planar<uint16_t, 12>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height);
-template void AnalyzeDiffMask_Planar<uint16_t, 14>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height);
-template void AnalyzeDiffMask_Planar<uint16_t, 16>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height);
+template void AnalyzeDiffMask_Planar<uint8_t,8>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags);
+template void AnalyzeDiffMask_Planar<uint16_t, 10>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags);
+template void AnalyzeDiffMask_Planar<uint16_t, 12>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags);
+template void AnalyzeDiffMask_Planar<uint16_t, 14>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags);
+template void AnalyzeDiffMask_Planar<uint16_t, 16>(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer8, int tpitch, int Width, int Height, int cpuFlags);
 
 // TDeint and TFM version
 void AnalyzeDiffMask_YUY2(uint8_t* dstp, int dst_pitch, uint8_t* tbuffer, int tpitch, int Width, int Height, bool mChroma)
@@ -1048,6 +1066,88 @@ template void check_combing_c_Metric1<uint8_t, true, int>(const uint8_t* srcp, u
 template void check_combing_c_Metric1<uint16_t, false, int64_t>(const uint16_t* srcp, uint8_t* cmkp, int width, int height, int src_pitch, int cmk_pitch, int64_t cthreshsq);
 
 
+void check_combing_AVX2(const uint8_t* srcp, uint8_t* dstp, int width,
+    int height, int src_pitch, int dst_pitch, int cthresh)
+{
+    unsigned int cthresht = std::min(std::max(255 - cthresh - 1, 0), 255);
+    auto threshb = _mm256_set1_epi8(cthresht);
+    unsigned int cthresh6t = std::min(std::max(65535 - cthresh * 6 - 1, 0), 65535);
+    auto thresh6w = _mm256_set1_epi16(cthresh6t);
+    auto zero = _mm256_setzero_si256();
+    auto all_ff = _mm256_set1_epi8(-1);
+
+    while (height--) {
+        for (int x = 0; x < width; x += 32) {
+            auto prev = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(srcp - src_pitch + x));
+            auto curr = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(srcp + x));
+            auto next = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(srcp + src_pitch + x));
+            auto diff_curr_next = _mm256_subs_epu8(curr, next);
+            auto diff_next_curr = _mm256_subs_epu8(next, curr);
+            auto diff_curr_prev = _mm256_subs_epu8(curr, prev);
+            auto diff_prev_curr = _mm256_subs_epu8(prev, curr);
+            // max(min(p-s,n-s), min(s-n,s-p))
+            auto xmm2_max = _mm256_max_epu8(_mm256_min_epu8(diff_prev_curr, diff_next_curr), _mm256_min_epu8(diff_curr_next, diff_curr_prev));
+            auto xmm2_cmp = _mm256_cmpeq_epi8(_mm256_adds_epu8(xmm2_max, threshb), all_ff);
+            //if constexpr (with_luma_mask) { // YUY2 luma mask
+            //    __m128i lumaMask = _mm_set1_epi16(0x00FF);
+            //    xmm2_cmp = _mm_and_si128(xmm2_cmp, lumaMask);
+            //}
+            auto res_part1 = xmm2_cmp;
+            if (!_mm256_test_all_zeros(xmm2_cmp, xmm2_cmp)) {
+                // output2
+                // compute 3*(p+n)
+                auto next_lo = _mm256_unpacklo_epi8(next, zero);
+                auto prev_lo = _mm256_unpacklo_epi8(prev, zero);
+                auto next_hi = _mm256_unpackhi_epi8(next, zero);
+                auto prev_hi = _mm256_unpackhi_epi8(prev, zero);
+                auto three = _mm256_set1_epi16(3);
+                auto mul_lo = _mm256_mullo_epi16(_mm256_adds_epu16(next_lo, prev_lo), three);
+                auto mul_hi = _mm256_mullo_epi16(_mm256_adds_epu16(next_hi, prev_hi), three);
+
+                // compute (pp+c*4+nn)
+                auto prevprev = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(srcp - src_pitch * 2 + x));
+                auto prevprev_lo = _mm256_unpacklo_epi8(prevprev, zero);
+                auto prevprev_hi = _mm256_unpackhi_epi8(prevprev, zero);
+                auto curr_lo = _mm256_unpacklo_epi8(curr, zero);
+                auto curr_hi = _mm256_unpackhi_epi8(curr, zero);
+                auto sum2_lo = _mm256_adds_epu16(_mm256_slli_epi16(curr_lo, 2), prevprev_lo); // pp + c*4
+                auto sum2_hi = _mm256_adds_epu16(_mm256_slli_epi16(curr_hi, 2), prevprev_hi); // pp + c*4
+
+                auto nextnext = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(srcp + src_pitch * 2 + x));
+                auto nextnext_lo = _mm256_unpacklo_epi8(nextnext, zero);
+                auto nextnext_hi = _mm256_unpackhi_epi8(nextnext, zero);
+                auto sum3_lo = _mm256_adds_epu16(sum2_lo, nextnext_lo);
+                auto sum3_hi = _mm256_adds_epu16(sum2_hi, nextnext_hi);
+
+                // working with sum3=(pp+c*4+nn)   and  mul=3*(p+n)
+                auto diff_sum3lo_mullo = _mm256_subs_epu16(sum3_lo, mul_lo);
+                auto diff_mullo_sum3lo = _mm256_subs_epu16(mul_lo, sum3_lo);
+                auto diff_sum3hi_mulhi = _mm256_subs_epu16(sum3_hi, mul_hi);
+                auto diff_mulhi_sum3hi = _mm256_subs_epu16(mul_hi, sum3_hi);
+                // abs( (pp+c*4+nn) - mul=3*(p+n) )
+                auto max_lo = _mm256_max_epi16(diff_sum3lo_mullo, diff_mullo_sum3lo);
+                auto max_hi = _mm256_max_epi16(diff_sum3hi_mulhi, diff_mulhi_sum3hi);
+                // abs( (pp+c*4+nn) - mul=3*(p+n) ) + thresh6w
+                auto lo_thresh6w_added = _mm256_adds_epu16(max_lo, thresh6w);
+                auto hi_thresh6w_added = _mm256_adds_epu16(max_hi, thresh6w);
+                // maximum reached?
+                auto cmp_lo = _mm256_cmpeq_epi16(lo_thresh6w_added, all_ff);
+                auto cmp_hi = _mm256_cmpeq_epi16(hi_thresh6w_added, all_ff);
+
+                auto res_lo = _mm256_srli_epi16(cmp_lo, 8);
+                auto res_hi = _mm256_srli_epi16(cmp_hi, 8);
+                auto res_part2 = _mm256_packus_epi16(res_lo, res_hi);
+
+                auto res = _mm256_and_si256(res_part1, res_part2);
+                _mm256_store_si256(reinterpret_cast<__m256i*>(dstp + x), res);
+            }
+        }
+        srcp += src_pitch;
+        dstp += dst_pitch;
+    }
+    _mm256_zeroupper();
+}
+
 
 template<bool with_luma_mask>
 #if defined(GCC) || defined(CLANG)
@@ -1414,8 +1514,8 @@ void compute_sum_16x8_sse2_luma(const uint8_t *srcp, int pitch, int &sum)
   // scrp is prev
   auto onesMask = _mm_set1_epi16(0x0001); // ones where luma
   auto all_ff = _mm_set1_epi8(-1);
-  auto prev = _mm_load_si128(reinterpret_cast<const __m128i*>(srcp));
-  auto curr = _mm_load_si128(reinterpret_cast<const __m128i*>(srcp + pitch));
+  auto prev = _mm_loadu_si128(reinterpret_cast<const __m128i*>(srcp));
+  auto curr = _mm_loadu_si128(reinterpret_cast<const __m128i*>(srcp + pitch));
   auto summa = _mm_setzero_si128();
   srcp += pitch * 2; // points to next
   for (int i = 0; i < 4; i++) { // 4x2=8
@@ -1425,8 +1525,8 @@ void compute_sum_16x8_sse2_luma(const uint8_t *srcp, int pitch, int &sum)
     n  # #
     nn   #
     */
-    auto next = _mm_load_si128(reinterpret_cast<const __m128i*>(srcp));
-    auto nextnext = _mm_load_si128(reinterpret_cast<const __m128i*>(srcp + pitch));
+    auto next = _mm_loadu_si128(reinterpret_cast<const __m128i*>(srcp));
+    auto nextnext = _mm_loadu_si128(reinterpret_cast<const __m128i*>(srcp + pitch));
 
     auto anded_common = _mm_and_si128(curr, next);
     auto with_prev = _mm_and_si128(prev, anded_common);
