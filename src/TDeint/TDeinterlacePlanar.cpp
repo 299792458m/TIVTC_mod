@@ -2311,14 +2311,13 @@ void TDeinterlace::eDeintPlanar(PVideoFrame &dst, PVideoFrame &mask,
     const int prv_pitch = prv->GetPitch(plane) / sizeof(pixel_t);
     
     const pixel_t *srcp = reinterpret_cast<const pixel_t*>(src->GetReadPtr(plane));
-    const int src_pitch = src->GetPitch(plane) / sizeof(pixel_t);
     const int width = src->GetRowSize(plane) / sizeof(pixel_t);
     const int height = src->GetHeight(plane);
 
+    const int src_pitch = src->GetPitch(plane) / sizeof(pixel_t);
     const pixel_t *nxtp = reinterpret_cast<const pixel_t*>(nxt->GetReadPtr(plane));
-    const int nxt_pitch = nxt->GetPitch(plane);
 
-    // mask is a special clip, always 8 bits
+    
     const uint8_t *maskp = mask->GetReadPtr(plane);
     const int mask_pitch = mask->GetPitch(plane);
 
