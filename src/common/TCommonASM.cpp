@@ -481,34 +481,35 @@ static inline void AnalyzeOnePixel_AVX2_881(uint8_t* dstp,
             do {	//連続スキップ用 ここで局所化するか次のforでやるかだけで演算は変わらないのであまり効果なし？
                 x += 32;
                 temp = _mm256_loadu_si256((__m256i*)(dp + x));
-            } while ((_mm256_testz_si256(temp, _mm256_set1_epi8(-4))) && (x < Width));
+            } while ((_mm256_testz_si256(temp, _mm256_set1_epi8(-4))) && (x < Width - 1));
             //x--;return;	//continue時に++されるから
         }
 
-        temp = _mm256_and_si256(temp, _mm256_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
-        temp = _mm256_cmpeq_epi8(temp, _mm256_setzero_si256());	// <=3 ? ff : 0
-        tmpi = _mm256_movemask_epi8(temp);	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
+        if (x < Width - 1) {
+            temp = _mm256_and_si256(temp, _mm256_set1_epi8(-4));	// subs(0.5cpi)よりも速い(0.33cpi)
+            temp = _mm256_cmpeq_epi8(temp, _mm256_setzero_si256());	// <=3 ? ff : 0
+            tmpi = _mm256_movemask_epi8(temp);	// temp[] <=3 ? 1 : 0 各バイトの最上位ビットを抽出
 
-        //この時点で <=3 ? 0 : 1
+            //この時点で <=3 ? 0 : 1
 
-        //tzcntの場合(BMIが使える≒AVX2)
-        //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1  si128では上位16bitには1が入る andnotを使うよりも何故か速い
-        //tmpi = _mm_tzcnt_32(tmpi);	        //tzcntの場合(BMI) bsfより高速
-        //x += tmpi -1; return;	//continue後(forのpost)に+1されるので-1
+            //tzcntの場合(BMIが使える≒AVX2)
+            //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1  si128では上位16bitには1が入る andnotを使うよりも何故か速い
+            //tmpi = _mm_tzcnt_32(tmpi);	        //tzcntの場合(BMI) bsfより高速
+            //x += tmpi -1; return;	//continue後(forのpost)に+1されるので-1
 
-        //popcntで代替≒SSE42
-        tmpi = _mm_popcnt_u32(tmpi & (~tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
-        //x += tmpi - 1; return;                //continue後(forのpost)に+1されるので-1
-        x += tmpi;
-        dp_d = *(unsigned int*)(dp + x - 1);	//continueしない場合
+            //popcntで代替≒SSE42
+            tmpi = _mm_popcnt_u32(tmpi & (~tmpi - 1));	//ちょっとだけ遅いが・・・SSE時はこちら
+            //x += tmpi - 1; return;                //continue後(forのpost)に+1されるので-1
+            x += tmpi;
+            dp_d = *(unsigned int*)(dp + x - 1);	//continueしない場合
 
-        //bsfの場合 POPCNTも使えないならこうなる
-        //long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
-        //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1
-        //_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
-        //x += tmpl-1;					//continue後(forのpost)に+1されるので-1
-        //continue;
-
+            //bsfの場合 POPCNTも使えないならこうなる
+            //long unsigned int tmpl;			//32bitを指定しないとbsfが文句を言う・・・
+            //tmpi = ~tmpi;						// temp[] <=3 ? 0 : 1
+            //_BitScanForward(&tmpl,tmpi);	//組み込み関数使用 1が見つからない場合は返り値が0になる(無視してるが)
+            //x += tmpl-1;					//continue後(forのpost)に+1されるので-1
+            //continue;
+        }
         _mm256_zeroupper();
     }
 
@@ -517,7 +518,7 @@ static inline void AnalyzeOnePixel_AVX2_881(uint8_t* dstp,
     //dpp[x - 1] <= 3 && dpp[x] <= 3 && dpp[x + 1] <= 3 &&
     //dpn[x - 1] <= 3 && dpn[x] <= 3 && dpn[x + 1] <= 3) continue;
     dpp_d = *(unsigned int*)(dpp + x - 1);
-    dpn_d = *(unsigned int*)(dpn + x - 1);		//範囲(Width)を超えてアクセスするので注意
+    dpn_d = *(unsigned int*)(dpn + x - 1);		//xの範囲制限で防いでるが、Widthを超えてアクセスするので注意
 
     if (((dp_d & 0x00FC00FC) | (dpp_d & 0x00FCFCFC) | (dpn_d & 0x00FCFCFC)) == 0)	return;
     //if ( _mm_testz_si128(temp, _mm_set_epi32(0,0x00FCFCFC,0x00FC00FC,0x00FCFCFC)) ) {continue;}	//dpp[x]は判定しないので注意
