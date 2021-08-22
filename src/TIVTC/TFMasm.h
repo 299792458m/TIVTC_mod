@@ -25,6 +25,7 @@
 #ifndef __TFMASM_H__
 #define __TFMASM_H__
 
+#include <cstdint>
 #include "internal.h"
 #include <nmmintrin.h>	//SSE4.2
 #include <immintrin.h>	//AVX/AVX2/FMA

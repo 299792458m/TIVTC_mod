@@ -28,7 +28,7 @@
 #include "TCommonASM.h"
 
 
-bool TFM::checkCombedYUY2(PVideoFrame &src, int n, IScriptEnvironment *env, int match,
+bool TFM::checkCombedYUY2(PVideoFrame &src, int n, int match,
   int *blockN, int &xblocksi, int *mics, bool ddebug, bool chroma, int cthresh)
 {
   if (mics[match] != -20)
@@ -263,7 +263,7 @@ cjump:
   const uint8_t *cmkp = cmask->GetPtr() + cmk_pitch;
   const uint8_t *cmkpp = cmkp - cmk_pitch;
   const uint8_t *cmkpn = cmkp + cmk_pitch;
-  memset(cArray, 0, arraysize * sizeof(int));
+  memset(cArray.get(), 0, arraysize * sizeof(int));
   int Heighta = (Height >> (yshift - 1)) << (yshift - 1);
   if (Heighta == Height) Heighta = Height - yhalf;
   const int Widtha = (Width >> (xshift - 1)) << (xshift - 1); // whole blocks
@@ -278,10 +278,10 @@ cjump:
       {
         const int box1 = (x >> xshift) << 2;
         const int box2 = ((x + xhalf) >> xshift) << 2;
-        ++cArray[temp1 + box1 + 0];
-        ++cArray[temp1 + box2 + 1];
-        ++cArray[temp2 + box1 + 2];
-        ++cArray[temp2 + box2 + 3];
+        ++cArray.get()[temp1 + box1 + 0];
+        ++cArray.get()[temp1 + box2 + 1];
+        ++cArray.get()[temp2 + box1 + 2];
+        ++cArray.get()[temp2 + box2 + 3];
       }
     }
     cmkpp += cmk_pitch;
@@ -303,10 +303,10 @@ cjump:
         {
           const int box1 = (x >> xshift) << 2;
           const int box2 = ((x + xhalf) >> xshift) << 2;
-          cArray[temp1 + box1 + 0] += sum;
-          cArray[temp1 + box2 + 1] += sum;
-          cArray[temp2 + box1 + 2] += sum;
-          cArray[temp2 + box2 + 3] += sum;
+          cArray.get()[temp1 + box1 + 0] += sum;
+          cArray.get()[temp1 + box2 + 1] += sum;
+          cArray.get()[temp2 + box1 + 2] += sum;
+          cArray.get()[temp2 + box2 + 3] += sum;
         }
       }
     }
@@ -333,10 +333,10 @@ cjump:
         {
           const int box1 = (x >> xshift) << 2;
           const int box2 = ((x + xhalf) >> xshift) << 2;
-          cArray[temp1 + box1 + 0] += sum;
-          cArray[temp1 + box2 + 1] += sum;
-          cArray[temp2 + box1 + 2] += sum;
-          cArray[temp2 + box2 + 3] += sum;
+          cArray.get()[temp1 + box1 + 0] += sum;
+          cArray.get()[temp1 + box2 + 1] += sum;
+          cArray.get()[temp2 + box1 + 2] += sum;
+          cArray.get()[temp2 + box2 + 3] += sum;
         }
       }
     }
@@ -359,10 +359,10 @@ cjump:
       {
         const int box1 = (x >> xshift) << 2;
         const int box2 = ((x + xhalf) >> xshift) << 2;
-        cArray[temp1 + box1 + 0] += sum;
-        cArray[temp1 + box2 + 1] += sum;
-        cArray[temp2 + box1 + 2] += sum;
-        cArray[temp2 + box2 + 3] += sum;
+        cArray.get()[temp1 + box1 + 0] += sum;
+        cArray.get()[temp1 + box2 + 1] += sum;
+        cArray.get()[temp2 + box1 + 2] += sum;
+        cArray.get()[temp2 + box2 + 3] += sum;
       }
     }
     cmkpp += cmk_pitch*yhalf;
@@ -379,10 +379,10 @@ cjump:
       {
         const int box1 = (x >> xshift) << 2;
         const int box2 = ((x + xhalf) >> xshift) << 2;
-        ++cArray[temp1 + box1 + 0];
-        ++cArray[temp1 + box2 + 1];
-        ++cArray[temp2 + box1 + 2];
-        ++cArray[temp2 + box2 + 3];
+        ++cArray.get()[temp1 + box1 + 0];
+        ++cArray.get()[temp1 + box2 + 1];
+        ++cArray.get()[temp2 + box1 + 2];
+        ++cArray.get()[temp2 + box2 + 3];
       }
     }
     cmkpp += cmk_pitch;
@@ -391,9 +391,9 @@ cjump:
   }
   for (int x = 0; x < arraysize; ++x)
   {
-    if (cArray[x] > mics[match])
+    if (cArray.get()[x] > mics[match])
     {
-      mics[match] = cArray[x];
+      mics[match] = cArray.get()[x];
       blockN[match] = x;
     }
   }
@@ -418,9 +418,9 @@ cjump:
 
 void TFM::buildDiffMapPlaneYUY2(const uint8_t *prvp, const uint8_t *nxtp,
   uint8_t *dstp, int prv_pitch, int nxt_pitch, int dst_pitch, int Height,
-  int Width, int tpitch, IScriptEnvironment *env)
+  int Width, int tpitch)
 {
-  buildABSDiffMask<uint8_t>(prvp - prv_pitch, nxtp - nxt_pitch, prv_pitch, nxt_pitch, tpitch, Width, Height >> 1, env);
-  AnalyzeDiffMask_YUY2(dstp, dst_pitch, tbuffer, tpitch, Width, Height, mChroma);
+  buildABSDiffMask<uint8_t>(prvp - prv_pitch, nxtp - nxt_pitch, prv_pitch, nxt_pitch, tpitch, Width, Height >> 1);
+  AnalyzeDiffMask_YUY2(dstp, dst_pitch, tbuffer.get(), tpitch, Width, Height, mChroma);
 }
 
