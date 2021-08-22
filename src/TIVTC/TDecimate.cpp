@@ -2302,7 +2302,11 @@ AVSValue __cdecl Create_TDecimate(AVSValue args, void* user_data, IScriptEnviron
   int cc;
   if (vidDetect >= 3) cc = 1;
   else cc = 2;
+
   bool chroma = args[26].IsBool() ? args[26].AsBool() : true;
+  VideoInfo vi = args[0].AsClip()->GetVideoInfo();
+  if (vi.IsY()) chroma = false;
+
   double dup_thresh = (args[1].IsInt() && args[1].AsInt() == 7) ? (chroma ? 0.4 : 0.5) : (chroma ? 1.1 : 1.4);
   double vid_thresh = (args[1].IsInt() && args[1].AsInt() == 7) ? (chroma ? 3.5 : 4.0) : (chroma ? 1.1 : 1.4);
   int mode = args[1].IsInt() ? args[1].AsInt() : 0;
@@ -2318,7 +2322,7 @@ AVSValue __cdecl Create_TDecimate(AVSValue args, void* user_data, IScriptEnviron
     args[11].AsInt(cc), args[12].AsString(""), args[13].AsString(""), args[14].AsString(""),
     args[15].AsString(""), args[16].AsString(""), args[17].AsInt(0), args[18].AsInt(32), args[19].AsInt(32),
     args[20].AsBool(false), args[21].AsBool(false), args[22].AsInt(1), args[23].AsBool(false),
-    args[24].AsBool(true), args[25].AsBool(false), args[26].AsBool(true), args[27].AsBool(false),
+    args[24].AsBool(true), args[25].AsBool(false), chroma, args[27].AsBool(false),
     args[28].AsInt(-200), args[29].AsBool(false), args[30].AsBool(false), args[31].AsBool(true),
     args[32].AsBool(false), args[33].IsBool() ? (args[33].AsBool() ? 1 : 0) : -1,
     args[34].IsClip() ? args[34].AsClip() : NULL, args[35].AsInt(0), args[36].AsInt(4), args[37].AsString(""), env);
@@ -2901,7 +2905,12 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   {
     if ((f = fopen(output, "w")) != NULL)
     {
+#ifdef _WIN32
       _fullpath(outputFull, output, MAX_PATH);
+#else
+      realpath(output, outputFull);
+#endif
+
       calcCRC(child, 15, outputCrc, env);
       fclose(f);
       f = NULL;

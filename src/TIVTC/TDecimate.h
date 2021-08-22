@@ -6,7 +6,7 @@
 **   IVTC or for other uses. TIVTC currently supports 8 bit planar YUV and
 **   YUY2 colorspaces.
 **
-**   Copyright (C) 2004-2008 Kevin Stone, additional work (C) 2020 pinterf
+**   Copyright (C) 2004-2008 Kevin Stone, additional work (C) 2020-2021 pinterf
 **
 **   This program is free software; you can redistribute it and/or modify
 **   it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 */
 
 #include <stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <math.h>
 #include "internal.h"
 #include "Font.h"
@@ -57,7 +57,7 @@ constexpr int VIDEO = 0x00000008; // ovr array - bit 4
 constexpr int ISMATCH = 0x00000070; // ovr array - bits 5-7
 constexpr int ISD2VFILM = 0x00000080; // ovr array - bit 8
 
-#define VERSION "v1.0.6"
+#define VERSION "v1.0.8"
 
 #define cfps(n) n == 1 ? "119.880120" : n == 2 ? "59.940060" : n == 3 ? "39.960040" : \
 				n == 4 ? "29.970030" : n == 5 ? "23.976024" : "unknown"
@@ -151,7 +151,12 @@ private:
   uint8_t *ovrArray;
   int mode2_num, mode2_den, mode2_numCycles, mode2_cfs[10];
   FILE *mkvOutF;
-  char buf[8192], outputFull[270];
+  char buf[8192];
+#ifdef _WIN32
+  char outputFull[MAX_PATH + 1];
+#else
+  char outputFull[PATH_MAX + 1];
+#endif
 
   void init_mode_5(IScriptEnvironment* env);
   void rerunFromStart(int s, const VideoInfo& vi, IScriptEnvironment *env);

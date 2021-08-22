@@ -24,7 +24,7 @@
 */
 
 #include <stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <limits.h>
 #include "internal.h"
 #include "TDecimate.h"
@@ -34,7 +34,7 @@
 #undef VERSION
 #endif
 
-#define VERSION "v1.9"
+#define VERSION "v1.10"
 
 class FrameDiff : public GenericVideoFilter
 {

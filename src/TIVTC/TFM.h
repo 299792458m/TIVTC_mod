@@ -24,7 +24,7 @@
 */
 
 #include <stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <xmmintrin.h>
 #include "Font.h"
 #include "calcCRC.h"
@@ -63,7 +63,7 @@ constexpr int D2VARRAY_MATCH_MASK = 0x3C;
 #ifdef VERSION
 #undef VERSION
 #endif
-#define VERSION "v1.0.6"
+#define VERSION "v1.0.7"
 
 template<int planarType>
 void FillCombedPlanarUpdateCmaskByUV(PlanarFrame* cmask);
@@ -137,7 +137,14 @@ private:
   
   MTRACK lastMatch;
   SCTRACK sclast;
-  char buf[4096], outputFull[270], outputCFull[270];
+  char buf[4096];
+#ifdef _WIN32
+  char outputFull[MAX_PATH + 1];
+  char outputCFull[MAX_PATH + 1];
+#else
+  char outputFull[PATH_MAX + 1];
+  char outputCFull[PATH_MAX + 1];
+#endif
   PlanarFrame* map;
   PlanarFrame *cmask;
 

@@ -2786,10 +2786,14 @@ template void TFM::buildABSDiffMask<uint16_t>(const uint8_t* prvp, const uint8_t
 
 AVSValue __cdecl Create_TFM(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
+  bool chroma = args[16].IsBool() ? args[16].AsBool() : false;
+  VideoInfo vi = args[0].AsClip()->GetVideoInfo();
+  if (vi.IsY()) chroma = false;
+
   AVSValue v = new TFM(args[0].AsClip(), args[1].AsInt(-1), args[2].AsInt(-1), args[3].AsInt(1),
     args[4].AsInt(6), args[5].AsString(""), args[6].AsString(""), args[7].AsString(""), args[8].AsString(""),
     args[9].AsBool(false), args[10].AsBool(false), args[11].AsInt(1), args[12].AsBool(true),
-    args[13].AsInt(15), args[14].AsInt(9), args[15].AsInt(80), args[16].AsBool(false), args[17].AsInt(16),
+    args[13].AsInt(15), args[14].AsInt(9), args[15].AsInt(80), chroma, args[17].AsInt(16),
     args[18].AsInt(16), args[19].AsInt(0), args[20].AsInt(0), args[23].AsString(""), args[24].AsInt(0),
     args[25].AsInt(4), args[26].AsFloat(12.0), args[27].AsInt(0), args[28].AsInt(1), args[29].AsString(""),
     args[30].AsBool(true), args[31].AsInt(0), args[32].AsBool(false), args[33].AsBool(true),
@@ -2954,7 +2958,7 @@ TFM::TFM(PClip _child, int _order, int _field, int _mode, int _PP, const char* _
     // tbuffer is 8 or 16 bits wide
     const int pixelsize = vi.ComponentSize();
     tpitchy = AlignNumber(vi.width * pixelsize, ALIGN_BUF);
-    const int widthUV = vi.width >> vi.GetPlaneWidthSubsampling(PLANAR_U);
+    const int widthUV = !vi.IsY() && !vi.IsRGB() ? vi.width >> vi.GetPlaneWidthSubsampling(PLANAR_U) : 0;
     tpitchuv = AlignNumber(widthUV * pixelsize, ALIGN_BUF);
   }
   else { // YUY2
@@ -3612,7 +3616,11 @@ emptyovr:
   {
     if ((f = fopen(output, "w")) != NULL)
     {
+#ifdef _WIN32
       _fullpath(outputFull, output, MAX_PATH);
+#else
+      realpath(output, outputFull);
+#endif
       calcCRC(child, 15, outputCrc, env);
       fclose(f);
       f = NULL;
@@ -3639,7 +3647,11 @@ emptyovr:
   {
     if ((f = fopen(outputC, "w")) != NULL)
     {
+#ifdef _WIN32
       _fullpath(outputCFull, outputC, MAX_PATH);
+#else
+      realpath(outputC, outputCFull);
+#endif
       fclose(f);
       f = NULL;
       if (outArray == NULL)
