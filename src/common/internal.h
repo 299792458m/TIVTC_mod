@@ -76,8 +76,45 @@ constexpr int ISD2VFILM = 0x00000080; // ovr array - bit 8
 
 constexpr uint32_t MAGIC_NUMBER = 0xdeadfeed;
 constexpr uint32_t MAGIC_NUMBER_2 = 0xdeadbeef;
+constexpr uint32_t MAGIC_NUMBER_DEADFEED = 0xdeadfeed; // TIVTC
+constexpr uint32_t MAGIC_NUMBER_2_DEADBEEF = 0xdeadbeef; // Decomb or DGDecode
+constexpr uint32_t MAGIC_NUMBER_3_DEADDEED = 0xdeaddeed;
+constexpr uint32_t MAGIC_NUMBER_4_DEADBEAD = 0xdeadbead;
 
 FILE *tivtc_fopen(const char *name, const char *mode);
 void BitBlt(uint8_t* dstp, int dst_pitch, const uint8_t* srcp, int src_pitch, int row_size, int height);
+
+// Frame properties set by TFM:
+// #define PROP_TFMDisplay "TFMDisplay"
+#define PROP_TFMMATCH "TFMMatch"
+#define PROP_TFMMics "TFMMics"
+#define PROP_Combed "_Combed"
+#define PROP_TFMD2VFilm "TFMD2VFilm"
+#define PROP_TFMField "TFMField"
+#define PROP_TFMPP "TFMPP"
+
+// Frame properties set by TDecimate:
+// #define PROP_TDecimateDisplay "TDecimateDisplay"
+#define PROP_TDecimateCycleMetrics "TDecimateCycleMetrics"
+#define PROP_TDecimateCycleMetricsPrev "TDecimateCycleMetricsPrev"
+#define PROP_TDecimateCycleMetricsNext "TDecimateCycleMetricsNext"
+#define PROP_TDecimateCycleFrameNums "TDecimateCycleFrameNums"
+#define PROP_TDecimateCycleFrameNumsPrev "TDecimateCycleFrameNumsPrev"
+#define PROP_TDecimateCycleFrameNumsNext "TDecimateCycleFrameNumsNext"
+#define PROP_TDecimateCycleBlendStatus "TDecimateCycleBlendStatus"
+// #define PROP_TDecimateCycleStart "TDecimateCycleStart"
+// #define PROP_TDecimateCycleMaxBlockDiff "TDecimateCycleMaxBlockDiff" // uint64_t[]
+// #define PROP_TDecimateOriginalFrame "TDecimateOriginalFrame"
+#define PROP_DurationNum "_DurationNum"
+#define PROP_DurationDen "_DurationDen"
+
+/* converts an int64 to int with saturation, useful to silence warnings when reading int properties among other things */
+static inline int int64ToIntS(int64_t i) {
+  if (i > INT_MAX)
+    return INT_MAX;
+  else if (i < INT_MIN)
+    return INT_MIN;
+  else return (int)i;
+}
 
 #endif  // __Internal_H__

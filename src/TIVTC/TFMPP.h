@@ -32,7 +32,7 @@
 #ifdef VERSION
 #undef VERSION
 #endif
-#define VERSION "v1.0.3"
+#define VERSION "v1.0.4"
 
 template<typename pixel_t>
 void maskClip2_C(const uint8_t* srcp, const uint8_t* dntp,
@@ -106,6 +106,8 @@ private:
   bool getHint(const VideoInfo &vi, PVideoFrame& src, int& field, bool& combed, unsigned int& hint);
   template<typename pixel_t>
   bool getHint_core(PVideoFrame& src, int& field, bool& combed, unsigned int& hint);
+
+  bool getProperties(const PVideoFrame& src, int& field, bool& combed, IScriptEnvironment* env) const;
 
   void getSetOvr(int n);
 

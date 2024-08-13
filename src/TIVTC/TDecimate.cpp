@@ -35,22 +35,47 @@ PVideoFrame __stdcall TDecimate::GetFrame(int n, IScriptEnvironment *env)
 {
   if (n < 0) n = 0;
   else if (n > nfrmsN) n = nfrmsN;
-  const VideoInfo& vi2 = child->GetVideoInfo();
-  // fixme: can it be different from vi?
   PVideoFrame dst;
-  if (mode < 2) dst = GetFrameMode01(n, env, vi2);     // most similar/longest string
-  else if (mode == 2) dst = GetFrameMode2(n, env, vi2); // arbitrary framerate
-  else if (mode == 3) dst = GetFrameMode3(n, env, vi2); // single pass mkv-vfr
-  else if (mode == 4) dst = GetFrameMode4(n, env, vi2); // metrics output
-  else if (mode == 5) dst = GetFrameMode5(n, env, vi2); // second pass of two pass hybrid
-  else if (mode == 6) dst = GetFrameMode6(n, env, vi2); // second pass for 120fps to vfr
-  else if (mode == 7) dst = GetFrameMode7(n, env, vi2); // arbitrary framerate v2
+  if (mode < 2) dst = GetFrameMode01(n, env, vi_child);     // most similar/longest string
+  else if (mode == 2) dst = GetFrameMode2(n, env, vi_child); // arbitrary framerate
+  else if (mode == 3) dst = GetFrameMode3(n, env, vi_child); // single pass mkv-vfr
+  else if (mode == 4) dst = GetFrameMode4(n, env, vi_child); // metrics output
+  else if (mode == 5  || mode == 6) dst = GetFrameMode56(n, env, vi_child); // second pass of two pass hybrid
+  // else if (mode == 6) dst = GetFrameMode6(n, env, vi_child); // second pass for 120fps to vfr
+  else if (mode == 7) dst = GetFrameMode7(n, env, vi_child); // arbitrary framerate v2
   else env->ThrowError("TDecimate:  unknown error (no such mode)!");
   if (usehints) {
     if (vi.ComponentSize() == 1)
       restoreHint<uint8_t>(dst, env);
     else
       restoreHint<uint16_t>(dst, env);
+  }
+  // Add frame properties: cycle metrics, frame numbers
+  if (has_at_least_v8) {
+      if (has_at_least_v9)
+          env->MakePropertyWritable(&dst);
+      else
+          env->MakeWritable(&dst);     
+      AVSMap* props = env->getFramePropsRW(dst); 
+
+       // current cycle metrics, frame nums and blend status
+      if (curr.diffMetricsF == nullptr) { curr.diffMetricsF = (int64_t*)malloc(curr.length * sizeof(int64_t)); }
+      for (int i = 0; i < curr.length; ++i) { curr.diffMetricsF[i] = (int64_t)curr.frame + i; }
+      env->propSetIntArray(props, PROP_TDecimateCycleFrameNums, curr.diffMetricsF, curr.length);
+      env->propSetFloatArray(props, PROP_TDecimateCycleMetrics, curr.diffMetricsN, curr.length);
+      env->propSetInt(props, PROP_TDecimateCycleBlendStatus, curr.blend, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+      
+       // previous cycle metrics & frame nums
+      if (prev.diffMetricsF == nullptr) { prev.diffMetricsF = (int64_t*)malloc(prev.length * sizeof(int64_t)); }
+      for (int i = 0; i < prev.length; ++i) { prev.diffMetricsF[i] = (int64_t)prev.frame + i; }
+      env->propSetIntArray(props, PROP_TDecimateCycleFrameNumsPrev, prev.diffMetricsF, prev.length);
+      env->propSetFloatArray(props, PROP_TDecimateCycleMetricsPrev, prev.diffMetricsN, prev.length);
+      
+       // next cycle metrics & frame nums
+      if (next.diffMetricsF == nullptr) { next.diffMetricsF = (int64_t*)malloc(next.length * sizeof(int64_t)); }
+      for (int i = 0; i < next.length; ++i) { next.diffMetricsF[i] = (int64_t)next.frame + i; }
+      env->propSetIntArray(props, PROP_TDecimateCycleFrameNumsNext, next.diffMetricsF, next.length);
+      env->propSetFloatArray(props, PROP_TDecimateCycleMetricsNext, next.diffMetricsN, next.length);
   }
   return dst;
 }
@@ -271,18 +296,14 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
       }
       else
       {
-        dst = env->NewVideoFrame(vi2);
-
-        if (!useclip2) {
-          PVideoFrame frame1 = child->GetFrame(f1, env);
-          PVideoFrame frame2 = child->GetFrame(f2, env);
-          blendFrames(frame1, frame2, dst, a1, vi2, env);
-        }
-        else {
-          PVideoFrame frame1 = clip2->GetFrame(f1, env);
-          PVideoFrame frame2 = clip2->GetFrame(f2, env);
-          blendFrames(frame1, frame2, dst, a1, vi2, env);
-        }
+        PClip blendSrc = !useclip2 ? child : clip2;
+        PVideoFrame frame1 = blendSrc->GetFrame(f1, env);
+        PVideoFrame frame2 = blendSrc->GetFrame(f2, env);
+        if (has_at_least_v8)
+          dst = env->NewVideoFrameP(vi2, &frame1);
+        else
+          dst = env->NewVideoFrame(vi2);
+        blendFrames(frame1, frame2, dst, a1, vi2, env);
       }
       if (debug) debugOutput2(n, 0, true, f1, f2, a1, a2);
       if (display) displayOutput(env, dst, n, 0, true, a1, a2, f1, f2, vi2);
@@ -337,19 +358,16 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
 
     if (f1 != 0)
     {
-      PVideoFrame dst = env->NewVideoFrame(vi2);
-      if (!useclip2)
-      {
-        PVideoFrame frame1 = child->GetFrame(f1, env);
-        PVideoFrame frame2 = child->GetFrame(f2, env);
-        blendFrames(frame1, frame2, dst, a1, vi2, env);
-      }
+      PVideoFrame dst;
+      PClip blendSrc = !useclip2 ? child : clip2;
+      PVideoFrame frame1 = blendSrc->GetFrame(f1, env);
+      PVideoFrame frame2 = blendSrc->GetFrame(f2, env);
+      if (has_at_least_v8)
+        dst = env->NewVideoFrameP(vi2, &frame1);
       else
-      {
-        PVideoFrame frame1 = clip2->GetFrame(f1, env);
-        PVideoFrame frame2 = clip2->GetFrame(f2, env);
-        blendFrames(frame1, frame2, dst, a1, vi2, env);
-      }
+        dst = env->NewVideoFrame(vi2);
+      blendFrames(frame1, frame2, dst, a1, vi2, env);
+
       if (display) displayOutput(env, dst, n, 0, true, a1, a2, f1, f2, vi2);
       if (debug) debugOutput2(n, 0, true, f1, f2, a1, a2);
       return dst;
@@ -430,18 +448,14 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
       }
       else
       {
-        dst = env->NewVideoFrame(vi2);
-
-        if (!useclip2) {
-          PVideoFrame frame1 = child->GetFrame(f1, env);
-          PVideoFrame frame2 = child->GetFrame(f2, env);
-          blendFrames(frame1, frame2, dst, a1, vi2, env);
-        }
-        else {
-          PVideoFrame frame1 = clip2->GetFrame(f1, env);
-          PVideoFrame frame2 = clip2->GetFrame(f2, env);
-          blendFrames(frame1, frame2, dst, a1, vi2, env);
-        }
+        PClip blendSrc = !useclip2 ? child : clip2;
+        PVideoFrame frame1 = blendSrc->GetFrame(f1, env);
+        PVideoFrame frame2 = blendSrc->GetFrame(f2, env);
+        if (has_at_least_v8)
+          dst = env->NewVideoFrameP(vi2, &frame1);
+        else
+          dst = env->NewVideoFrame(vi2);
+        blendFrames(frame1, frame2, dst, a1, vi2, env);
       }
       if (debug) debugOutput2(n, 0, true, f1, f2, a1, a2);
       if (display) displayOutput(env, dst, n, 0, true, a1, a2, f1, f2, vi2);
@@ -456,17 +470,16 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
       env->ThrowError("TDecimate:  major internal error.  Please report this to tritical ASAP!");
     }
     if (debug) debugOutput2(n, curr.frame + ret, curr.blend == 2 ? false : true, 0, 0, 0.0, 0.0);
+
+    PVideoFrame dst;
+    if (!useclip2) dst = child->GetFrame(curr.frame + ret, env);
+    else dst = clip2->GetFrame(curr.frame + ret, env);
     if (display)
     {
-      PVideoFrame dst;
-      if (!useclip2) dst = child->GetFrame(curr.frame + ret, env);
-      else dst = clip2->GetFrame(curr.frame + ret, env);
       env->MakeWritable(&dst);
       displayOutput(env, dst, n, curr.frame + ret, curr.blend == 2 ? false : true, 0.0, 0.0, 0, 0, vi2);
-      return dst;
     }
-    if (!useclip2) return child->GetFrame(curr.frame + ret, env);
-    return clip2->GetFrame(curr.frame + ret, env);
+    return dst;
   }
   else  // video (no dups)
   {
@@ -476,17 +489,15 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
     {
       if (debug) debugOutput2(n, n, false, 0, 0, 0.0, 0.0);
       // So.... did it not drop any frames up to this one? That's the only way output frame n corresponds to input frame n.
+      PVideoFrame dst;
+      if (!useclip2) dst = child->GetFrame(n, env);
+      else dst = clip2->GetFrame(n, env);
       if (display)
       {
-        PVideoFrame dst;
-        if (!useclip2) dst = child->GetFrame(n, env);
-        else dst = clip2->GetFrame(n, env);
         env->MakeWritable(&dst);
         displayOutput(env, dst, n, n, false, 0.0, 0.0, 0, 0, vi2);
-        return dst;
       }
-      if (!useclip2) return child->GetFrame(n, env);
-      return clip2->GetFrame(n, env);
+      return dst;
     }
     // blend down-convert (hybrid=1 leaves film untouched)
     PVideoFrame dst;
@@ -508,17 +519,14 @@ PVideoFrame TDecimate::GetFrameMode01(int n, IScriptEnvironment* env, const Vide
     }
     else
     {
-      dst = env->NewVideoFrame(vi2);
-      if (!useclip2) {
-        PVideoFrame frame1 = child->GetFrame(f1, env);
-        PVideoFrame frame2 = child->GetFrame(f2, env);
-        blendFrames(frame1, frame2, dst, a1, vi2, env);
-      }
-      else {
-        PVideoFrame frame1 = clip2->GetFrame(f1, env);
-        PVideoFrame frame2 = clip2->GetFrame(f2, env);
-        blendFrames(frame1, frame2, dst, a1, vi2, env);
-      }
+      PClip blendSrc = !useclip2 ? child : clip2;
+      PVideoFrame frame1 = blendSrc->GetFrame(f1, env);
+      PVideoFrame frame2 = blendSrc->GetFrame(f2, env);
+      if (has_at_least_v8)
+        dst = env->NewVideoFrameP(vi2, &frame1);
+      else
+        dst = env->NewVideoFrame(vi2);
+      blendFrames(frame1, frame2, dst, a1, vi2, env);
     }
 
     if (debug) debugOutput2(n, 0, false, f1, f2, a1, a2);
@@ -753,10 +761,13 @@ PVideoFrame TDecimate::GetFrameMode3(int n, IScriptEnvironment *env, const Video
   const VideoInfo vi2 = !useclip2 ? child->GetVideoInfo() : clip2->GetVideoInfo();
   PVideoFrame dst = env->NewVideoFrame(vi2);
   setBlack(dst, vi2);
+
+  if (retFrames <= -306 && se) {
+    env->ThrowError("TDecimate:  mode 3 finished (early termination)!");
+  }
+
   if (retFrames <= -305)
   {
-    if (retFrames <= -306 && se)
-      env->ThrowError("TDecimate:  mode 3 finished (early termination)!");
     sprintf(buf, "Mode 3:  Last Actual Frame = %d", lastFrame);
     Draw(dst, 2, 1, buf, vi2);
   }
@@ -811,9 +822,11 @@ PVideoFrame TDecimate::GetFrameMode4(int n, IScriptEnvironment *env, const Video
   return clip2->GetFrame(n, env);
 }
 
-PVideoFrame TDecimate::GetFrameMode5(int n, IScriptEnvironment *env, const VideoInfo &vi)
+PVideoFrame TDecimate::GetFrameMode56(int n, IScriptEnvironment *env, const VideoInfo &vi)
 {
   int frame = aLUT[n];
+  int durNum = frame_duration_info[frame].first;
+  int durDen = frame_duration_info[frame].second;
   if (debug)
   {
     sprintf(buf, "TDecimate:  inframe = %d  useframe = %d  (mode = %d)", n, frame, mode);
@@ -831,45 +844,30 @@ PVideoFrame TDecimate::GetFrameMode5(int n, IScriptEnvironment *env, const Video
 
     sprintf(buf, "TDecimate %s by tritical", VERSION);
     Draw(dst, 0, 0, buf, vi2);
-    sprintf(buf, "Mode: %d (vfr)  Hybrid = %d", mode, hybrid);
+    if (mode == 5)
+      sprintf(buf, "Mode: %d (vfr)  Hybrid = %d", mode, hybrid);
+    else
+      sprintf(buf, "Mode: %d (120fps -> vfr)", mode); // mode 6
     Draw(dst, 0, 1, buf, vi2);
     sprintf(buf, "inframe = %d  useframe = %d", n, frame);
     Draw(dst, 0, 2, buf, vi2);
     return dst;
   }
-  if (!useclip2) return child->GetFrame(frame, env);
-  return clip2->GetFrame(frame, env);
-}
+  PVideoFrame dst;
+  if (!useclip2) dst = child->GetFrame(frame, env);
+  else dst = clip2->GetFrame(frame, env);
 
-PVideoFrame TDecimate::GetFrameMode6(int n, IScriptEnvironment *env, const VideoInfo &vi)
-{
-  int frame = aLUT[n];
-  if (debug)
-  {
-    sprintf(buf, "TDecimate:  inframe = %d  useframe = %d  (mode = %d)", n, frame, mode);
-    OutputDebugString(buf);
+  if(has_at_least_v8) {
+    if(has_at_least_v9)
+      env->MakePropertyWritable(&dst);
+    else
+      env->MakeWritable(&dst);
+    AVSMap *props = env->getFramePropsRW(dst);
+    env->propSetInt(props, PROP_DurationNum, durNum, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
+    env->propSetInt(props, PROP_DurationDen, durDen, AVSPropAppendMode::PROPAPPENDMODE_REPLACE);
   }
+  return dst;}
 
-  const VideoInfo vi2 = (!useclip2) ? child->GetVideoInfo() : clip2->GetVideoInfo();
-
-  if (display)
-  {
-    PVideoFrame dst;
-    if (!useclip2) dst = child->GetFrame(frame, env);
-    else dst = clip2->GetFrame(frame, env);
-    env->MakeWritable(&dst);
-
-    sprintf(buf, "TDecimate %s by tritical", VERSION);
-    Draw(dst, 0, 0, buf, vi2);
-    sprintf(buf, "Mode: %d (120fps -> vfr)", mode);
-    Draw(dst, 0, 1, buf, vi2);
-    sprintf(buf, "inframe = %d  useframe = %d", n, frame);
-    Draw(dst, 0, 2, buf, vi2);
-    return dst;
-  }
-  if (!useclip2) return child->GetFrame(frame, env);
-  return clip2->GetFrame(frame, env);
-}
 
 // PF 180131 uses usehints! but its runtime alreadz, no problem
 void TDecimate::rerunFromStart(const int s, const VideoInfo &vi, IScriptEnvironment *env)
@@ -989,10 +987,10 @@ void TDecimate::calcMetricPreBuf(int n1, int n2, int pos, const VideoInfo &vit, 
     {
       if (!src) {
         PVideoFrame frame = child->GetFrame(n2, env);
-        nbuf.match[pos] = getHint(vit, frame, nbuf.filmd2v[pos]);
+        nbuf.match[pos] = getHint(vit, frame, nbuf.filmd2v[pos], env);
       }
       else {
-        nbuf.match[pos] = getHint(vit, src, nbuf.filmd2v[pos]);
+        nbuf.match[pos] = getHint(vit, src, nbuf.filmd2v[pos], env);
       }
     }
   }
@@ -1087,7 +1085,7 @@ void TDecimate::calcMetricCycle(Cycle &current, IScriptEnvironment *env, const V
           {
             nextt = child->GetFrame(w, env);
             next_num = w;
-            current.match[i] = getHint(vit, nextt, current.filmd2v[i]); // hints: vit not vi (are they different?)
+            current.match[i] = getHint(vit, nextt, current.filmd2v[i], env); // hints: vit not vi (are they different?)
           }
         }
         continue;
@@ -1103,7 +1101,7 @@ void TDecimate::calcMetricCycle(Cycle &current, IScriptEnvironment *env, const V
       if (current.match[i] == -20 && hnt)
       {
         if (!usehints) current.match[i] = -200;
-        else current.match[i] = getHint(vit, nextt, current.filmd2v[i]);
+        else current.match[i] = getHint(vit, nextt, current.filmd2v[i], env);
       }
       if (next_numd == w - 1) 
         copyFrame(prev, next, vit);
@@ -1125,7 +1123,7 @@ void TDecimate::calcMetricCycle(Cycle &current, IScriptEnvironment *env, const V
           {
             next = child->GetFrame(w, env);
             next_num = w;
-            current.match[i] = getHint(vit, next, current.filmd2v[i]);
+            current.match[i] = getHint(vit, next, current.filmd2v[i], env);
           }
         }
         continue;
@@ -1139,7 +1137,7 @@ void TDecimate::calcMetricCycle(Cycle &current, IScriptEnvironment *env, const V
       if (current.match[i] == -20 && hnt)
       {
         if (!usehints) current.match[i] = -200;
-        else current.match[i] = getHint(vit, next, current.filmd2v[i]);
+        else current.match[i] = getHint(vit, next, current.filmd2v[i], env);
       }
     }
 
@@ -1252,8 +1250,44 @@ uint64_t calcLumaDiffYUY2_SSD(const uint8_t* prvp, const uint8_t* nxtp,
   return calcLumaDiffYUY2_SADorSSD<false>(prvp, nxtp, width, height, prv_pitch, nxt_pitch, nt, cpuFlags);
 }
 
-int TDecimate::getHint(const VideoInfo& vi, PVideoFrame& src, int& d2vfilm) const
+int TDecimate::getTFMFrameProperties(const PVideoFrame *src, int& d2vfilm, IScriptEnvironment *env) const
 {
+  const AVSMap *props = env->getFramePropsRO(*src);
+  int err;
+
+  int match = int64ToIntS(env->propGetInt(props, PROP_TFMMATCH, 0, &err));
+  if (err)
+      match = -200;
+
+  d2vfilm = int64ToIntS(env->propGetInt(props, PROP_TFMD2VFilm, 0, &err));
+  if (err)
+      d2vfilm = 0;
+
+  int field = int64ToIntS(env->propGetInt(props, PROP_TFMField, 0, &err));
+  if (err)
+    field = 0;
+
+  if (match != -200 && field != 0)
+  {
+    if (match == 0) match = 3;
+    else if (match == 2) match = 4;
+    else if (match == 3) match = 0;
+    else if (match == 4) match = 2;
+  }
+
+  return match;
+}
+
+int TDecimate::getHint(const VideoInfo& vi, PVideoFrame& src, int& d2vfilm, IScriptEnvironment* env) const
+{
+#ifndef DONT_USE_FRAMEPROPS
+  if(has_at_least_v8) {
+    int match = getTFMFrameProperties(&src, d2vfilm, env);
+    // on error or no existance: match == -200
+    if (match >= 0)
+      return match;
+  }
+#endif
   if (vi.ComponentSize() == 1)
     return getHint_core<uint8_t>(src, d2vfilm);
   else // 2
@@ -1473,7 +1507,7 @@ bool TDecimate::checkForTwoDropLongestString(Cycle &p, Cycle &c, Cycle &n)
     (c1 != c.cycleS && (c.dupArray[c1 - 1] == 1 || c.dupArray[c1 + 1] == 1))) return false;
   if ((c2 == c.cycleE - 1 && (n.dupArray[n.cycleS] == 1 || c.dupArray[c2 - 1] == 1)) ||
     (c2 != c.cycleE - 1 && (c.dupArray[c2 - 1] == 1 || c.dupArray[c2 + 1] == 1))) return false;
-  if (hybrid == 0 && noblend)
+  if ((hybrid == 0 || hybrid == 1) && noblend) // allow noblend when hybrid=1
   {
     if (c.diffMetricsU[c1] <= c.diffMetricsU[c2])
       c.decimate[c1] = c.decimate2[c1] = 1;
@@ -1608,7 +1642,7 @@ void TDecimate::mostSimilarDecDecision(Cycle &p, Cycle &c, Cycle &n, IScriptEnvi
       if (savedc1 != c.lowest[0] && savedc1 != c.lowest[1]) goto tryother;
       if (savedc2 != c.lowest[0] && savedc2 != c.lowest[1]) goto tryother;
       if (abs(savedc1 - savedc2) <= 1) goto tryother;
-      if (hybrid == 0 && noblend)
+      if ((hybrid == 0 || hybrid == 1) && noblend) //allow noblend when hybrid=1
       {
         if (c.diffMetricsU[savedc1] <= c.diffMetricsU[savedc2])
           c.decimate[savedc1] = c.decimate2[savedc1] = 1;
@@ -1756,7 +1790,7 @@ void TDecimate::findDupStrings(Cycle &p, Cycle &c, Cycle &n, IScriptEnvironment 
       }
       if (n1 == c2) usecp += 5;
     }
-    if (hybrid == 0 && noblend && usecp == 6)
+    if ((hybrid == 0 || hybrid == 1) && noblend && usecp == 6) //allow noblend when hybrid=1
     {
       if (ct1 && !ct2) usecp = 5;
       else if (!ct1 && ct2) usecp = 1;
@@ -2116,7 +2150,7 @@ void TDecimate::calcBlendRatios2(double &amount1, double &amount2, int &frame1, 
   offset = (offset - int(offset))*0.5;
   double pos = 1 + (tf%p.length)*stepsize - offset;
   double posf = pos - (int)(pos);
-  for (b = p.frameEO - 1, i = p.cycleE - 1; i >= p.cycleS; --i, --b)
+  for (b = p.frameEO - 1, i = p.cycleE - 1; (hybrid == 3 ? i > p.cycleS : i >= p.cycleS); --i, --b)
   {
     if (p.decimate[i] != 1)
     {
@@ -2124,7 +2158,7 @@ void TDecimate::calcBlendRatios2(double &amount1, double &amount2, int &frame1, 
       break;
     }
   }
-  for (k = 1, b = c.frameSO, i = c.cycleS; i < c.cycleE; ++i, ++b)
+  for (k = 1, b = c.frameSO, i = c.cycleS; (hybrid == 3 ? i <= c.cycleE : i < c.cycleE); ++i, ++b)
   {
     if (c.decimate[i] != 1)
     {
@@ -2132,7 +2166,7 @@ void TDecimate::calcBlendRatios2(double &amount1, double &amount2, int &frame1, 
       ++k;
     }
   }
-  for (b = n.frameSO, i = c.cycleS; i < c.cycleE; ++i, ++b)
+  for (b = n.frameSO, i = c.cycleS; (hybrid == 3 ? i <= c.cycleE : i < c.cycleE); ++i, ++b)
   {
     if (c.decimate[i] != 1)
     {
@@ -2322,6 +2356,11 @@ AVSValue __cdecl Create_TDecimate(AVSValue args, void* user_data, IScriptEnviron
   if ((mode == 0 || mode == 1 || mode == 3) && cycle > 1 && cycle < 26 && !(*input))
     v = new CacheFilter(args[0].AsClip(), cycle * 4 + 1, 1, cycle, env);
   else v = args[0].AsClip();
+
+  // backwards compatibility: retain default noblend behaviour when hybrid=1
+  // args[8]=hybrid , args[31]=noblend
+  bool noblend = args[8].AsInt(0) == 1 ? args[31].AsBool(false) : args[31].AsBool(true);
+  
   v = new TDecimate(v.AsClip(), args[1].AsInt(0), args[2].AsInt(1), args[3].AsInt(5),
     args[4].AsFloat(23.976f), args[5].AsFloat((float)dup_thresh), args[6].AsFloat((float)vid_thresh),
     args[7].AsFloat(15), args[8].AsInt(0), args[9].AsInt(vidDetect), args[10].AsInt(cc),
@@ -2329,9 +2368,11 @@ AVSValue __cdecl Create_TDecimate(AVSValue args, void* user_data, IScriptEnviron
     args[15].AsString(""), args[16].AsString(""), args[17].AsInt(0), args[18].AsInt(32), args[19].AsInt(32),
     args[20].AsBool(false), args[21].AsBool(false), args[22].AsInt(1), args[23].AsBool(false),
     args[24].AsBool(true), args[25].AsBool(false), chroma, args[27].AsBool(false),
-    args[28].AsInt(-200), args[29].AsBool(false), args[30].AsBool(false), args[31].AsBool(true),
+    args[28].AsInt(-200), args[29].AsBool(false), args[30].AsBool(false), noblend,
     args[32].AsBool(false), args[33].IsBool() ? (args[33].AsBool() ? 1 : 0) : -1,
-    args[34].IsClip() ? args[34].AsClip() : NULL, args[35].AsInt(0), args[36].AsInt(4), args[37].AsString(""), env);
+    args[34].IsClip() ? args[34].AsClip() : NULL, args[35].AsInt(0), args[36].AsInt(4), args[37].AsString(""), 
+    args[38].AsInt(0), args[39].AsInt(-1), // displayDecimation, displayOpt
+    env);
   return v;
 }
 
@@ -2496,6 +2537,8 @@ finishTP:
   }
 #endif
 
+  int fpsNum = vi.fps_numerator;
+  int frameNum = vi.fps_denominator;
   vi.MulDivFPS(vi.num_frames - count, vi.num_frames);
   vi.num_frames = vi.num_frames - count;
   if ((f = tivtc_fopen(mkvOut.c_str(), "w")) != nullptr)
@@ -2531,6 +2574,26 @@ finishTP:
         }
         else ++count;
       }
+
+      int frameDen;
+      switch (ddup)
+      {
+          case 1:
+          frameDen = static_cast<int>(fpsNum * (cycle - cycleR) / cycle);
+          break;
+          case 2:
+          frameDen = static_cast<int>(fpsNum * (cycle - cycleR - 1) / cycle);
+          break;
+          default:
+          frameDen = fpsNum;
+          break;
+      }
+      for (int frm = b; frm < b + cycle; frm++)
+      {
+        frame_duration_info[frm].first = frameNum;
+        frame_duration_info[frm].second = frameDen;
+      }
+
       if (vid)
       {
         if (!tcfv1)
@@ -2643,7 +2706,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   int _nt, int _blockx, int _blocky, bool _debug, bool _display, int _vfrDec,
   bool _batch, bool _tcfv1, bool _se, bool _chroma, bool _exPP, int _maxndl, bool _m2PA,
   bool _predenoise, bool _noblend, bool _ssd, int _usehints, PClip _clip2,
-  int _sdlim, int _opt, const char* _orgOut, IScriptEnvironment* env) : GenericVideoFilter(_child),
+  int _sdlim, int _opt, const char* _orgOut, int _displayDecimation, int _displayOpt, IScriptEnvironment* env) : GenericVideoFilter(_child),
   mode(_mode),
   cycleR(_cycleR), cycle(_cycle), rate(_rate), dupThresh(_dupThresh),
   hybrid(_hybrid), vidThresh(_vidThresh),
@@ -2653,9 +2716,10 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   vfrDec(_vfrDec), debug(_debug), display(_display), batch(_batch), tcfv1(_tcfv1), se(_se),
   maxndl(_maxndl), chroma(_chroma), m2PA(_m2PA), exPP(_exPP),
   noblend(_noblend), predenoise(_predenoise), ssd(_ssd), sdlim(_sdlim),
-  opt(_opt), clip2(_clip2), orgOut(_orgOut),
+  opt(_opt), clip2(_clip2), orgOut(_orgOut), displayDecimation(_displayDecimation), displayOpt(_displayOpt),
   prev(5, 0), curr(5, 0), next(5, 0), nbuf(5, 0), diff(nullptr, nullptr)
 {
+
   mkvOutF = nullptr;
   FILE *f = nullptr;
   char linein[1024], *linep, *linet;
@@ -2668,8 +2732,15 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   try { env->CheckVersion(8); }
   catch (const AvisynthError&) { has_at_least_v8 = false; }
 
+  if (has_at_least_v8) {
+    try { env->CheckVersion(9); }
+    catch (const AvisynthError&) { has_at_least_v9 = false; }
+  }
+
   cpuFlags = env->GetCPUFlags();
   if (opt == 0) cpuFlags = 0;
+
+  vi_child = vi;
 
   if (vi.BitsPerComponent() > 16)
     env->ThrowError("TDecimate:  only 8-16 bit formats supported!");
@@ -2731,6 +2802,8 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
     env->ThrowError("TDecimate:  invalid sdlim setting (%d through %d (inclusive) are allowed)!", 0, int(ceil(cycle / double(cycleR - 1))) - 2);
   if (opt < 0 || opt > 4)
     env->ThrowError("TDecimate:  opt must be set to 0, 1, 2, 3, or 4!");
+  if (displayDecimation < 0)
+    env->ThrowError("TDecimate:  displayDecimation must be a nonnegative number!");
   if (clip2 && vi.num_frames != clip2->GetVideoInfo().num_frames)
     env->ThrowError("TDecimate:  clip2 must have the same number of frames as the input clip!");
   if (clip2 && !clip2->GetVideoInfo().IsYUV())
@@ -2739,6 +2812,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
     env->ThrowError("TDecimate:  clip2: only 8-16 bit formats supported!");
   if (clip2)
   {
+    vi_clip2 = clip2->GetVideoInfo();
     clip2->SetCacheHints(CACHE_GENERIC, 2);
     useclip2 = true;
   }
@@ -2791,7 +2865,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
     int d2hg;
     
     PVideoFrame sthg = child->GetFrame(0, env);
-    int mhg = getHint(vi, sthg, d2hg);
+    int mhg = getHint(vi, sthg, d2hg, env);
     if (mhg != -200) usehints = true;
     else usehints = false;
   }
@@ -2820,12 +2894,29 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   blocky_half = blocky >> 1;
   blockx_half = blockx >> 1;
   useTFMPP = false;
+  // first check Avisynth variable
   try
   {
     AVSValue getTFMPP = env->GetVar("TFMPPValue");
     if (getTFMPP.IsInt() && getTFMPP.AsInt() > 1) useTFMPP = true;
   }
   catch (IScriptEnvironment::NotFound) {}
+
+  // then check if frame prop exists (like VapourSynth port)
+  if(has_at_least_v8 && !useTFMPP) {
+    PVideoFrame first_frame = child->GetFrame(0, env);
+
+    const AVSMap *props = env->getFramePropsRO(first_frame);
+
+    int err;
+    int64_t TFMPP = env->propGetInt(props, PROP_TFMPP, 0, &err);
+    if (err) {
+        //useTFMPP = false; // no property: no problem
+    } else {
+        useTFMPP = TFMPP > 1;
+    }
+  }
+
   if (exPP) useTFMPP = true;
   if (vi.IsPlanar())
   {
@@ -3432,6 +3523,8 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
     }
     if (aLUT.size()) aLUT.resize(0);
     aLUT.resize(vi.num_frames, -20);
+    if (rate <= 0)
+        env->ThrowError("TDecimate:  rate must be greater than 0.");
     unsigned int num, den;
     FloatToFPS(rate, num, den, env);
     vi.SetFPS(num, den);
@@ -3472,7 +3565,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
   else if (mode == 6)
   {
     std::vector<int> input_magic_numbers(vi.num_frames, 0);
-    int j = 0, k = 0, dups;
+    int j = 0, k = 0, frm = 0, dups, frameDen;
     double timestamp = 0.0;
     int lastt = 0, lastf = 0;
     if ((f = tivtc_fopen(mkvOut.c_str(), "w")) == nullptr)
@@ -3487,6 +3580,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
     else fprintf(f, "# timecode format v2\n");
     fprintf(f, "# TDecimate %s by tritical\n", VERSION);
     fprintf(f, "# Mode 6 - Auto-generated mkv timecodes file\n");
+    vi.SetFPS(0, 0);
     while (j < vi.num_frames)
     {
       dups = 1;
@@ -3513,6 +3607,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           }
           else if (lastt <= 0) lastt = 1;
           input_magic_numbers[j - 1] = 2;
+          frameDen = 120000;
           dups = 0;
           ++k;
         }
@@ -3531,6 +3626,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           }
           else if (lastt <= 0) lastt = 2;
           input_magic_numbers[j - 2] = 2;
+          frameDen = 60000;
           dups = 0;
           ++k;
         }
@@ -3549,6 +3645,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           }
           else if (lastt <= 0) lastt = 3;
           input_magic_numbers[j - 3] = 2;
+          frameDen = 40000;
           dups = 0;
           ++k;
         }
@@ -3572,6 +3669,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           else if (lastt <= 0) lastt = 4;
           k += (dups >> 2);
           for (int i = 0; i < dups; i += 4) input_magic_numbers[j - dups + i] = 2;
+          frameDen = 30000;
           dups = 0;
         }
         else if ((dups % 5) == 0) // 23.97602
@@ -3594,6 +3692,7 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           else if (lastt <= 0) lastt = 5;
           k += (dups / 5);
           for (int i = 0; i < dups; i += 5) input_magic_numbers[j - dups + i] = 2;
+          frameDen = 24000;
           dups = 0;
         }
         else if (dups > 5)
@@ -3612,8 +3711,15 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
           else if (lastt <= 0) lastt = 5;
           input_magic_numbers[j - dups] = 2;
           dups -= 5;
+          frameDen = 24000;
           ++k;
         }
+      }
+      while (frm < j)
+      {
+        frame_duration_info[frm].first = 1001;
+        frame_duration_info[frm].second = frameDen;
+        ++frm;
       }
     }
     if (tcfv1 && lastt != 5) fprintf(f, "%d,%d,%s\n", lastf, k - 1, cfps(lastt));
@@ -3648,6 +3754,10 @@ TDecimate::TDecimate(PClip _child, int _mode, int _cycleR, int _cycle, double _r
 
 TDecimate::~TDecimate()
 {
+  if (curr.diffMetricsF != nullptr) { free(curr.diffMetricsF); curr.diffMetricsF = nullptr; }
+  if (prev.diffMetricsF != nullptr) { free(prev.diffMetricsF); prev.diffMetricsF = nullptr; }
+  if (next.diffMetricsF != nullptr) { free(next.diffMetricsF); next.diffMetricsF = nullptr; }
+ 
   if (metricsOutArray.size())
   {
     if (output.size())

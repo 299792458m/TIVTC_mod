@@ -52,7 +52,7 @@
 #ifdef VERSION
 #undef VERSION
 #endif
-#define VERSION "v1.0.7"
+#define VERSION "v1.0.8"
 
 template<int planarType>
 void FillCombedPlanarUpdateCmaskByUV(PlanarFrame* cmask);
@@ -193,6 +193,8 @@ private:
   void writeDisplay(PVideoFrame &dst, const VideoInfo &vi_disp, int n, int fmatch, int combed, bool over,
     int blockN, int xblocks, bool d2vmatch, int *mics, PVideoFrame &prv,
     PVideoFrame &src, PVideoFrame &nxt, IScriptEnvironment *env);
+
+  void putFrameProperties(PVideoFrame& dst, int match, int combed, bool d2vfilm, const int mics[5], IScriptEnvironment* env) const;
 
   void putHint(const VideoInfo &vi, PVideoFrame& dst, int match, int combed, bool d2vfilm);
   template<typename pixel_t>

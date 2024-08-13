@@ -34,8 +34,9 @@
 #include "calcCRC.h"
 #include "profUtil.h"
 #include "Cache.h"
+#include <unordered_map>
 
-#define VERSION "v1.0.8"
+#define VERSION "v1.0.11"
 
 // All the rest of this code was just copied from tdecimate.cpp because I'm
 // too lazy to make it work such that it could call that code.
@@ -76,7 +77,11 @@ class TDecimate : public GenericVideoFilter
 {
 private:
   bool has_at_least_v8;
+  bool has_at_least_v9;
   int cpuFlags;
+  VideoInfo vi_child;
+  VideoInfo vi_clip2;
+
 
   int mode;
   int cycleR, cycle;
@@ -110,6 +115,8 @@ private:
   int opt;
   PClip clip2;
   std::string orgOut;
+  int displayDecimation; // debug display addition
+  int displayOpt; // debug display addition parameter
   Cycle prev, curr, next, nbuf;
 
   int nfrms, nfrmsN, linearCount;
@@ -123,6 +130,7 @@ private:
   std::unique_ptr<uint64_t, decltype (&_aligned_free)> diff;
   std::vector<uint64_t> metricsArray, metricsOutArray, mode2_metrics;
   std::vector<int> aLUT, mode2_decA, mode2_order;
+  std::unordered_map<int, std::pair<int, int>> frame_duration_info;
   unsigned int outputCrc;
   std::vector<uint8_t> ovrArray;
   int mode2_num, mode2_den, mode2_numCycles, mode2_cfs[10];
@@ -140,8 +148,8 @@ private:
   void checkVideoMatches(Cycle &p, Cycle &c);
   bool checkMatchDup(int mp, int mc);
   void findDupStrings(Cycle &p, Cycle &c, Cycle &n, IScriptEnvironment *env);
-
-  int getHint(const VideoInfo& vi, PVideoFrame& src, int& d2vfilm) const;
+  int getTFMFrameProperties(const PVideoFrame* src, int& d2vfilm, IScriptEnvironment* env) const;
+  int getHint(const VideoInfo& vi, PVideoFrame& src, int& d2vfilm, IScriptEnvironment* env) const;
   template<typename pixel_t>
   int getHint_core(PVideoFrame &src, int &d2vfilm) const;
 
@@ -157,8 +165,8 @@ private:
   PVideoFrame GetFrameMode2(int n, IScriptEnvironment *env, const VideoInfo& vi);
   PVideoFrame GetFrameMode3(int n, IScriptEnvironment *env, const VideoInfo& vi);
   PVideoFrame GetFrameMode4(int n, IScriptEnvironment *env, const VideoInfo& vi);
-  PVideoFrame GetFrameMode5(int n, IScriptEnvironment *env, const VideoInfo& vi);
-  PVideoFrame GetFrameMode6(int n, IScriptEnvironment *env, const VideoInfo& vi);
+  PVideoFrame GetFrameMode56(int n, IScriptEnvironment *env, const VideoInfo& vi);
+  //PVideoFrame GetFrameMode6(int n, IScriptEnvironment *env, const VideoInfo& vi);
   PVideoFrame GetFrameMode7(int n, IScriptEnvironment *env, const VideoInfo& vi);
   void getOvrFrame(int n, uint64_t &metricU, uint64_t &metricF) const;
   void getOvrCycle(Cycle &current, bool mode2);
@@ -166,7 +174,7 @@ private:
     int ret, bool film, double amount1, double amount2, int f1, int f2, const VideoInfo &vi);
   void formatMetrics(Cycle &current);
   void formatDups(Cycle &current);
-  void formatDecs(Cycle &current);
+  void formatDecs(Cycle& current, bool displayDecimationDefined, int displayFrom, int displayTo);
   void formatMatches(Cycle &current);
   void formatMatches(Cycle &current, Cycle &previous);
   void debugOutput1(int n, bool film, int blend);
@@ -211,7 +219,7 @@ public:
     int _nt, int _blockx, int _blocky, bool _debug, bool _display, int _vfrDec,
     bool _batch, bool _tcfv1, bool _se, bool _chroma, bool _exPP, int _maxndl,
     bool _m2PA, bool _predenoise, bool _noblend, bool _ssd, int _usehints,
-    PClip _clip2, int _sdlim, int _opt, const char* _orgOut, IScriptEnvironment* env);
+    PClip _clip2, int _sdlim, int _opt, const char* _orgOut, int _displayDecimation, int _displayOpt, IScriptEnvironment* env);
   ~TDecimate();
 
   int __stdcall SetCacheHints(int cachehints, int frame_range) override {
