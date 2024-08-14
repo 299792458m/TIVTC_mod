@@ -66,3 +66,14 @@ From the 'build' folder under project root:
 
       cd build
       sudo make install
+
+
+# MOD
+    a clone of pinterf's TIVTC as above
+    自分向けのTFM速度調整版
+
+    compareFieldsSlow2処理をSIMD化(したつもり
+    buildDiffMapPlaneYV12処理を一部SIMD化(?) で速度向上を図る
+    8bit以外の確認を全くしてないので注意
+
+
